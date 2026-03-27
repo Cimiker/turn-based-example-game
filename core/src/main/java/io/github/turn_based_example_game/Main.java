@@ -5,28 +5,85 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.utils.ScreenUtils;
 
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Preferences;
+import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.scenes.scene2d.Stage;
+
+import io.github.turn_based_example_game.screens.*;
+
+import java.io.IOException;
+
 /** {@link com.badlogic.gdx.ApplicationListener} implementation shared by all platforms. */
 public class Main extends ApplicationAdapter {
-    private SpriteBatch batch;
-    private Texture image;
+    Preferences prefs;
+    private Stage currentStage;
+    public SoundController soundController;
 
     @Override
     public void create() {
-        batch = new SpriteBatch();
-        image = new Texture("libgdx.png");
+
+        try {
+            NetworkManager.initialize();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+
+        //Create settings if they don't exist
+        prefs = Gdx.app.getPreferences("GameSettings");
+        if(!prefs.contains("gameVolume")) {
+            prefs.putFloat("gameVolume", 100f);
+            prefs.putBoolean("isFullScreen", false);
+            prefs.flush();
+        }
+
+        soundController = new SoundController();
+
+        if(Account.load()) {
+            Account.authenticate(success -> {
+                Gdx.app.postRunnable(() -> {
+                    if(success){
+                        switchScreen(new MainMenuScreen(this, soundController));
+                    }else{
+                        switchScreen(new LoginScreen(this, soundController));
+                    }
+                });
+            });
+        } else {
+            switchScreen(new LoginScreen(this, soundController));
+        }
+    }
+
+    public void switchScreen(Stage newStage) {
+        if (currentStage != null) currentStage.dispose();  // Clean up old stage
+        currentStage = newStage;
+        Gdx.input.setInputProcessor(currentStage);
+    }
+
+    @Override
+    public void resize(int width, int height) {
+        if (currentStage != null) {
+            if (currentStage instanceof GameScreen) {
+                ((GameScreen)currentStage).resize(width, height);
+            } else  {
+                currentStage.getViewport().update(width, height, true);
+            }
+        }
     }
 
     @Override
     public void render() {
-        ScreenUtils.clear(0.15f, 0.15f, 0.2f, 1f);
-        batch.begin();
-        batch.draw(image, 140, 210);
-        batch.end();
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+        if (currentStage != null) {
+            currentStage.act(Gdx.graphics.getDeltaTime());
+            currentStage.draw();
+        }
     }
 
     @Override
     public void dispose() {
-        batch.dispose();
-        image.dispose();
+        if (currentStage != null) currentStage.dispose();
+        NetworkManager.close();
     }
 }
