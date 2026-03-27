@@ -1,13 +1,25 @@
-# turn_based_example_game
+# Turn-based-example-game
 
 A [libGDX](https://libgdx.com/) project generated with [gdx-liftoff](https://github.com/libgdx/gdx-liftoff).
 
-This project was generated with a template including simple application launchers and an `ApplicationAdapter` extension that draws libGDX logo.
+An example 2D game for a course in TalTech. Project is intended for newcomers to take inspiration from. The example project is a multiplayer game utilizing LibGDX library for the game and Kryonet for server-side networking.
 
-## Platforms
+# Gameplay description
+
+in progress
+
+# How to run
+
+in progress
+
+## Platforms/Main modules
 
 - `core`: Main module with the application logic shared by all platforms.
 - `lwjgl3`: Primary desktop platform using LWJGL3; was called 'desktop' in older docs.
+
+# Other files/directories
+
+in progress
 
 ## Gradle
 
