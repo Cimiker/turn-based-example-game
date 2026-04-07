@@ -3,12 +3,13 @@ eclipse.project.name = appName + '-core'
 
 dependencies {
   api "com.badlogicgames.gdx:gdx:$gdxVersion"
-  api "com.badlogicgames.gdx:gdx-box2d:$gdxVersion"
-  api "com.badlogicgames.gdx:gdx-freetype:$gdxVersion"
-  api "com.badlogicgames.gdx:gdx:$gdxVersion"
-  implementation "com.esotericsoftware:kryonet:2.22.0-RC1"
+  api "com.esotericsoftware:kryonet:2.22.0-RC1"
 
   if(enableGraalNative == 'true') {
     implementation "io.github.berstanio:gdx-svmhelper-annotations:$graalHelperVersion"
   }
+}
+
+jar {
+  duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }

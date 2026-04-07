@@ -11,7 +11,7 @@ public class NetworkManager {
         client = new Client();
         client.start();
         Network.register(client);
-        client.connect(5000, "193.40.255.14", 8080, 8081);
+        client.connect(5000, "127.0.0.1", 8080, 8081);
 
     }
 
@@ -30,7 +30,7 @@ public class NetworkManager {
             }
 
             // Try reconnecting
-            client.connect(5000, "193.40.255.14", 8080, 8081);
+            client.connect(5000, "127.0.0.1", 8080, 8081);
             System.out.println("Reconnected successfully!");
         } catch (IOException e) {
             System.err.println("Reconnection failed: " + e.getMessage());

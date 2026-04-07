@@ -1,25 +1,14 @@
-# Turn-based-example-game
+# turn_based_example_game
 
 A [libGDX](https://libgdx.com/) project generated with [gdx-liftoff](https://github.com/libgdx/gdx-liftoff).
 
-An example 2D game for a course in TalTech. Project is intended for newcomers to take inspiration from. The example project is a multiplayer game utilizing LibGDX library for the game and Kryonet for server-side networking.
+This project was generated with a template including simple application launchers and an `ApplicationAdapter` extension that draws libGDX logo.
 
-# Gameplay description
-
-in progress
-
-# How to run
-
-in progress
-
-## Platforms/Main modules
+## Platforms
 
 - `core`: Main module with the application logic shared by all platforms.
 - `lwjgl3`: Primary desktop platform using LWJGL3; was called 'desktop' in older docs.
-
-# Other files/directories
-
-in progress
+- `server`: A separate application without access to the `core` module.
 
 ## Gradle
 
@@ -39,6 +28,7 @@ Useful Gradle tasks and flags:
 - `idea`: generates IntelliJ project data.
 - `lwjgl3:jar`: builds application's runnable jar, which can be found at `lwjgl3/build/libs`.
 - `lwjgl3:run`: starts the application.
+- `server:run`: runs the server application.
 - `test`: runs unit tests (if any).
 
 Note that most tasks that are not specific to a single project can be run with `name:` prefix, where the `name` should be replaced with the ID of a specific project.
