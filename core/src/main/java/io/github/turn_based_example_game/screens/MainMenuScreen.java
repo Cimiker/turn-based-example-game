@@ -25,9 +25,10 @@ public class MainMenuScreen extends Stage {
 
         // Load UI skin and background texture
         Skin skin = new Skin(Gdx.files.internal("uiskin.json"));
+        Texture backgroundTexture = new Texture(Gdx.files.internal("menuBackground.png"));
 
         // UI Components
-        //Image backgroundImage = new Image(backgroundTexture); // Main background
+        Image backgroundImage = new Image(backgroundTexture); // Main background
 
         Label titleLabel = new Label("Main Menu", skin);
         Label usernameLabel = new Label(Account.getUsername(), skin);
@@ -38,6 +39,13 @@ public class MainMenuScreen extends Stage {
         TextButton settingsButton = new TextButton("Settings", skin);
         TextButton exitButton = new TextButton("Exit", skin);
         TextButton logOutButton = new TextButton("Log out", skin);
+
+        // Configure and add the background image to the stage
+        // backgroundImage.setSize(backgroundImage.getWidth(), backgroundImage.getHeight());
+        // backgroundImage.setPosition(backgroundImage.getX(), backgroundImage.getY());
+        backgroundImage.setFillParent(true);
+        backgroundImage.setZIndex(0); // Set background behind everything else
+        addActor(backgroundImage);
 
         // Layout container for all buttons and labels
         Table table = new Table();
@@ -57,11 +65,54 @@ public class MainMenuScreen extends Stage {
         addActor(table);
 
 
+        // Navigate to Join Game Lobby screen
+        startButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                Gdx.app.postRunnable(() -> game.switchScreen(new JoinGameLobbyScreen(game, soundController)));
+            }
+        });
+
+        // Navigate to Tutorial screen
+        tutorialButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                Gdx.app.postRunnable(() -> game.switchScreen(new TutorialScreen(game, soundController)));
+            }
+        });
+
+        // Navigate to Settings screen
+        settingsButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                Gdx.app.postRunnable(() -> game.switchScreen(new SettingsScreen(game, soundController)));
+            }
+        });
+
+        // Log out and return to log in screen
+        logOutButton.addListener(new ClickListener(){
+            @Override
+            public void clicked(InputEvent event, float x, float y){
+                Account.delete(); // Clear saved account info
+                //soundController.stopMenuTheme();
+                //soundController.disposeMenuTheme();
+                Gdx.app.postRunnable(() -> game.switchScreen(new LoginScreen(game, soundController)));
+            }
+        });
+
         // Exit application
         exitButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 Gdx.app.exit();
+            }
+        });
+
+        // Navigate to Leaderboard screen
+        leaderboardButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                Gdx.app.postRunnable(() -> game.switchScreen(new LeaderboardScreen(game, soundController)));
             }
         });
     }

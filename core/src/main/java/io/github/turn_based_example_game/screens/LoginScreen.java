@@ -28,20 +28,18 @@ public class LoginScreen extends Stage {
 
         // Load UI skin and background texture
         Skin skin = new Skin(Gdx.files.internal("uiskin.json"));
-        // Texture backgroundTexture = new Texture(Gdx.files.internal("menuBackground.png"));
+        Texture backgroundTexture = new Texture(Gdx.files.internal("menuBackground.png"));
 
         // UI Components
-        // Image backgroundImage = new Image(backgroundTexture);  // Background image
+        Image backgroundImage = new Image(backgroundTexture);  // Background image
         Label titleLabel = new Label("Login", skin);           // Screen title
         TextField usernameField = new TextField("", skin);     // Username input
         usernameField.setMessageText("Username");
 
         // Configure background
-        // backgroundImage.setFillParent(true);
-        // backgroundImage.setSize(backgroundImage.getWidth(), backgroundImage.getHeight());
-        // backgroundImage.setPosition(backgroundImage.getX(), backgroundImage.getY());
-        // backgroundImage.setZIndex(0);
-        // addActor(backgroundImage);
+        backgroundImage.setPosition(backgroundImage.getX(), backgroundImage.getY());
+        backgroundImage.setZIndex(0);
+        addActor(backgroundImage);
 
         // Password input setup
         TextField passwordField = new TextField("", skin);
