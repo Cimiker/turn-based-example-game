@@ -80,8 +80,7 @@ public class JoinGameLobbyScreen extends Stage {
         createLobbyButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                System.out.println("Going to create lobby...");
-                //Gdx.app.postRunnable(() -> game.switchScreen(new MainMenuScreen(game, soundController)));
+                Gdx.app.postRunnable(() -> game.switchScreen(new CreateLobbyScreen(game, soundController)));
             }
         });
     }
