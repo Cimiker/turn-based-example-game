@@ -25,6 +25,9 @@ public class Network {
         kryo.register(PlayerStats[].class);
         kryo.register(LeaderboardResponse.class);
         kryo.register(LeaderboardRequest.class);
+        kryo.register(LobbySettings.class);
+        kryo.register(LobbyPlayer.class);
+        kryo.register(LobbyState.class);
 
     }
 
@@ -75,5 +78,23 @@ public class Network {
 
     public static class LeaderboardResponse {
         public PlayerStats[] leaderboard;
+    }
+
+    public static class LobbySettings {
+        public int maxPlayers;
+        public String lobbyMode;
+        public boolean fillWithBots;
+    }
+
+    public static class LobbyPlayer {
+        public String username;
+        public boolean ready;
+        public boolean owner;
+        public boolean bot;
+    }
+
+    public static class LobbyState {
+        public LobbySettings settings;
+        public ArrayList<LobbyPlayer> players = new ArrayList<>();
     }
 }
