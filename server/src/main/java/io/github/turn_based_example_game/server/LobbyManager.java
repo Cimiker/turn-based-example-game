@@ -9,9 +9,29 @@ import java.util.Random;
 public class LobbyManager {
     private static final int LOBBY_ID_LENGTH = 5;
     private static final Random RANDOM = new Random();
+    private static final String[] BOT_NAMES = {
+        "Martin",
+        "Laura",
+        "Patrick",
+        "Sean",
+        "Jack",
+        "Ashley",
+        "Maria",
+        "Lewis",
+        "Simon",
+        "Sam",
+        "Adam",
+        "Bruce",
+        "James"
+    };
 
+    private final GameManager gameManager;
     private final Map<Account, Lobby> lobbiesByAccount = new HashMap<>();
     private final Map<String, Lobby> lobbiesById = new HashMap<>();
+
+    public LobbyManager(GameManager gameManager) {
+        this.gameManager = gameManager;
+    }
 
     public synchronized boolean handlePacket(Account account, Object object) {
         if (object instanceof Network.CreateLobbyRequest request) {
@@ -83,12 +103,7 @@ public class LobbyManager {
 
         if (settings.fillWithBots) {
             for (int i = 2; i <= settings.maxPlayers; i++) {
-                Network.LobbyPlayer bot = new Network.LobbyPlayer();
-                bot.username = "Bot " + (i - 1);
-                bot.ready = true;
-                bot.owner = false;
-                bot.bot = true;
-                lobby.bots.add(bot);
+                lobby.bots.add(createBotPlayer(lobby));
             }
         }
 
@@ -170,14 +185,21 @@ public class LobbyManager {
             return result;
         }
 
-        int playerIndex = 0;
-        for (Account playerAccount : lobby.players.keySet()) {
-            playerAccount.setInGame(true);
-            Network.GameStateUpdate update = new Network.GameStateUpdate();
-            update.playerIndex = playerIndex++;
-            playerAccount.sendPacket(update);
+        ArrayList<Account> humanAccounts = new ArrayList<>(lobby.players.keySet());
+        ArrayList<Network.LobbyPlayer> playersInOrder = new ArrayList<>();
+        for (Network.LobbyPlayer player : lobby.players.values()) {
+            playersInOrder.add(copyPlayer(player));
+        }
+        for (Network.LobbyPlayer bot : lobby.bots) {
+            playersInOrder.add(copyPlayer(bot));
+        }
+        gameManager.startLobbyGame(humanAccounts, playersInOrder);
+        for (Account playerAccount : humanAccounts) {
             lobbiesByAccount.remove(playerAccount);
         }
+        lobbiesById.remove(lobby.lobbyId);
+        lobby.players.clear();
+        lobby.bots.clear();
 
         result.success = true;
         result.message = "Game starting.";
@@ -303,13 +325,23 @@ public class LobbyManager {
     }
 
     private Network.LobbyPlayer createReplacementBot(Lobby lobby) {
-        int index = 1;
-        while (containsPlayerName(lobby, "Bot " + index)) {
-            index++;
+        return createBotPlayer(lobby);
+    }
+
+    private Network.LobbyPlayer createBotPlayer(Lobby lobby) {
+        ArrayList<String> availableNames = new ArrayList<>();
+        for (String botName : BOT_NAMES) {
+            if (!containsPlayerName(lobby, botName)) {
+                availableNames.add(botName);
+            }
         }
 
         Network.LobbyPlayer bot = new Network.LobbyPlayer();
-        bot.username = "Bot " + index;
+        if (!availableNames.isEmpty()) {
+            bot.username = availableNames.get(RANDOM.nextInt(availableNames.size()));
+        } else {
+            bot.username = BOT_NAMES[RANDOM.nextInt(BOT_NAMES.length)] + " " + (RANDOM.nextInt(900) + 100);
+        }
         bot.ready = true;
         bot.owner = false;
         bot.bot = true;

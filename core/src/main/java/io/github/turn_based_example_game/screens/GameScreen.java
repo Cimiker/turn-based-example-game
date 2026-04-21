@@ -14,10 +14,13 @@ import com.badlogic.gdx.scenes.scene2d.ui.Image;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
+import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Scaling;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
+import com.badlogic.gdx.math.Vector2;
 import io.github.turn_based_example_game.Account;
 import io.github.turn_based_example_game.Main;
 import io.github.turn_based_example_game.Network;
@@ -25,7 +28,11 @@ import io.github.turn_based_example_game.NetworkManager;
 import io.github.turn_based_example_game.SoundController;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Consumer;
 
 public class GameScreen extends Stage {
     private static final String CARD_ASSET_ROOT = "UnoCards/sprites/";
@@ -37,24 +44,75 @@ public class GameScreen extends Stage {
     private static final int DEFAULT_HAND_SIZE = 7;
     private static final float CARD_HOVER_SCALE = 1.08f;
     private static final float CARD_HOVER_DURATION = 0.08f;
+    private static final String[] NUMBERED_CARD_COLORS = {"red", "yellow", "green", "blue"};
+    private static final int NUMBERED_CARD_VARIANTS = 10;
+    private static final String[] DEFAULT_PLAYER_HAND = {
+        "red_7_filled",
+        "yellow_2_white",
+        "blue_skip_filled",
+        "green_switch_order_white",
+        "change_color",
+        "red_plus_2_filled",
+        "blue_9_white"
+    };
 
     private final Array<Texture> disposableTextures = new Array<>();
+    private final Main game;
+    private final SoundController soundController;
     private final Skin skin;
     private final List<Network.LobbyPlayer> playOrder = new ArrayList<>();
+    private final List<String> playerHandCards = new ArrayList<>();
+    private final PlayPile playPile;
+    private final Map<String, Integer> handCountsByUsername = new HashMap<>();
+    private final Map<String, Table> hiddenHandTablesByUsername = new HashMap<>();
+    private final Map<String, Label> playerLabelsByUsername = new HashMap<>();
+    private final Map<String, String> playerLabelTextByUsername = new HashMap<>();
+    private final Consumer<Network.GameStateUpdate> gameStateListener;
+    private final Consumer<Network.GameEnd> gameEndListener;
+    private final Vector2 temporaryStagePosition = new Vector2();
+
+    private Table playerHandTable;
+    private Table wildColorPicker;
+    private StaticCardActor playPileCardActor;
+    private boolean currentPlayerCanDraw = true;
+    private boolean turnActionsLocked;
+    private boolean pendingTurnSubmission;
+    private boolean pendingWildColorChoice;
+    private String currentTurnUsername;
+    private int pendingWildHandIndex = -1;
 
     public GameScreen() {
-        this(null, null, null);
+        this(null, null, null, null);
     }
 
     public GameScreen(Main game, SoundController soundController) {
-        this(game, soundController, null);
+        this(game, soundController, null, null);
     }
 
     public GameScreen(Main game, SoundController soundController, Network.LobbyState lobbyState) {
+        this(game, soundController, lobbyState, null);
+    }
+
+    public GameScreen(Main game, SoundController soundController, Network.LobbyState lobbyState, Network.GameStateUpdate initialGameState) {
         super(new ScreenViewport());
+        this.game = game;
+        this.soundController = soundController;
         skin = new Skin(Gdx.files.internal("uiskin.json"));
         playOrder.addAll(buildPlayOrder(lobbyState != null ? lobbyState : NetworkManager.getCurrentLobby()));
+        initializePlayerHand(initialGameState);
+        playPile = new PlayPile(resolveInitialTopPlayPileCardId(initialGameState));
+        initializeDisplayedHandCounts(initialGameState);
+        currentTurnUsername = resolveInitialTurnUsername(initialGameState);
+        if (initialGameState != null) {
+            currentPlayerCanDraw = initialGameState.currentPlayerCanDraw;
+            turnActionsLocked = initialGameState.turnActionsLocked;
+        }
         buildBoard();
+        refreshSynchronizedUi();
+        gameStateListener = this::applyGameStateUpdate;
+        gameEndListener = this::handleGameEnd;
+        NetworkManager.setGameStartListener(gameStateListener);
+        NetworkManager.setGameEndListener(gameEndListener);
         Gdx.input.setInputProcessor(this);
     }
 
@@ -76,6 +134,9 @@ public class GameScreen extends Stage {
         root.add(createTopRow()).growX().top().row();
         root.add(createMiddleRow()).expand().fill().row();
         root.add(createBottomRow()).growX().bottom();
+
+        wildColorPicker = createWildColorPicker();
+        addActor(wildColorPicker);
     }
 
     private Table createTopRow() {
@@ -110,11 +171,12 @@ public class GameScreen extends Stage {
             return section;
         }
 
-        Label title = new Label(getPlayerLabel(player), skin);
-        title.setColor(Color.WHITE);
+        Label title = createPlayerTitleLabel(player.username, getPlayerLabel(player));
         section.add(title).padBottom(10f).row();
 
-        section.add(createHiddenHand(DEFAULT_HAND_SIZE)).center();
+        Table handTable = createHiddenHand(getDisplayedHandCount(player.username));
+        hiddenHandTablesByUsername.put(player.username, handTable);
+        section.add(handTable).center();
         return section;
     }
 
@@ -126,11 +188,12 @@ public class GameScreen extends Stage {
             return section;
         }
 
-        Label title = new Label(getPlayerLabel(player), skin);
-        title.setColor(Color.WHITE);
+        Label title = createPlayerTitleLabel(player.username, getPlayerLabel(player));
         title.setWrap(true);
         section.add(title).width(200f).center().padBottom(10f).row();
-        section.add(createHiddenHand(DEFAULT_HAND_SIZE)).center();
+        Table handTable = createHiddenHand(getDisplayedHandCount(player.username));
+        hiddenHandTablesByUsername.put(player.username, handTable);
+        section.add(handTable).center();
         return section;
     }
 
@@ -141,19 +204,46 @@ public class GameScreen extends Stage {
         Label title = new Label("Play Pile", skin);
         title.setColor(new Color(1f, 0.95f, 0.7f, 1f));
         section.add(title).padBottom(12f).row();
-        section.add(createPile("Play Pile", "change_color_plus_4", false, false, CARD_WIDTH, CARD_HEIGHT))
+        playPileCardActor = new StaticCardActor(playPile.getTopCardId(), false, CARD_WIDTH, CARD_HEIGHT);
+        section.add(createPile("Play Pile", playPileCardActor, CARD_WIDTH, CARD_HEIGHT))
             .size(CARD_WIDTH + 14f, CARD_HEIGHT + 38f);
 
         return section;
     }
 
+    private Table createWildColorPicker() {
+        Table picker = new Table(skin);
+        picker.defaults().width(88f).height(40f).pad(4f);
+        picker.setVisible(false);
+        picker.setTouchable(Touchable.disabled);
+
+        picker.add(createWildColorButton("Red", "red"));
+        picker.add(createWildColorButton("Green", "green"));
+        picker.row();
+        picker.add(createWildColorButton("Blue", "blue"));
+        picker.add(createWildColorButton("Yellow", "yellow"));
+        picker.pack();
+        return picker;
+    }
+
+    private TextButton createWildColorButton(String text, String colorId) {
+        TextButton button = new TextButton(text, skin);
+        button.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                chooseWildColor(colorId);
+            }
+        });
+        return button;
+    }
+
     private Table createDrawPileArea() {
         float drawWidth = CARD_WIDTH * DRAW_PILE_SCALE;
         float drawHeight = CARD_HEIGHT * DRAW_PILE_SCALE;
-        return createPile("Draw Pile", "card_back", true, true, drawWidth, drawHeight);
+        return createPile("Draw Pile", new DrawPileCardActor(drawWidth, drawHeight), drawWidth, drawHeight);
     }
 
-    private Table createPile(String labelText, String cardId, boolean hidden, boolean hoverEnabled, float cardWidth, float cardHeight) {
+    private Table createPile(String labelText, Actor cardActor, float cardWidth, float cardHeight) {
         Table pile = new Table();
         pile.defaults().pad(4f);
 
@@ -164,7 +254,7 @@ public class GameScreen extends Stage {
         Label label = new Label(labelText, skin);
         label.setColor(Color.WHITE);
 
-        pile.add(createCardActor(cardId, hidden, hoverEnabled, cardWidth, cardHeight)).size(cardWidth, cardHeight).row();
+        pile.add(cardActor).size(cardWidth, cardHeight).row();
         pile.add(label).padTop(4f);
         return pile;
     }
@@ -174,40 +264,34 @@ public class GameScreen extends Stage {
         section.defaults().pad(4f);
 
         String labelText = player == null ? "Your Hand" : getPlayerLabel(player);
-        Label title = new Label(labelText, skin);
-        title.setColor(Color.WHITE);
+        String username = player == null ? Account.getUsername() : player.username;
+        Label title = createPlayerTitleLabel(username, labelText);
         section.add(title).padBottom(12f).row();
 
-        Table cards = new Table();
-        cards.defaults().padLeft(-30f);
+        playerHandTable = new Table();
+        playerHandTable.defaults().padLeft(-30f);
+        refreshPlayerHand();
 
-        String[] hand = {
-            "red_7_filled",
-            "yellow_2_white",
-            "blue_skip_filled",
-            "green_switch_order_white",
-            "change_color",
-            "red_plus_2_filled",
-            "blue_9_white"
-        };
-        for (String cardId : hand) {
-            cards.add(createCardActor(cardId, false, true, CARD_WIDTH, CARD_HEIGHT)).size(CARD_WIDTH, CARD_HEIGHT);
-        }
-
-        section.add(cards).bottom();
+        section.add(playerHandTable).bottom();
         return section;
     }
 
     private Table createHiddenHand(int cardCount) {
         Table cards = new Table();
         cards.defaults().padLeft(-30f);
+        populateHiddenHand(cards, cardCount);
+        return cards;
+    }
+
+    private void populateHiddenHand(Table cards, int cardCount) {
+        cards.clearChildren();
         float width = CARD_WIDTH * OPPONENT_CARD_SCALE;
         float height = CARD_HEIGHT * OPPONENT_CARD_SCALE;
         for (int i = 0; i < cardCount; i++) {
             Actor card = createCardActor("card_back", true, false, width, height);
             cards.add(card).size(width, height);
         }
-        return cards;
+        cards.invalidateHierarchy();
     }
 
     private List<Network.LobbyPlayer> buildPlayOrder(Network.LobbyState lobbyState) {
@@ -276,6 +360,262 @@ public class GameScreen extends Stage {
             return "You";
         }
         return player.bot ? player.username + " [Bot]" : player.username;
+    }
+
+    private Label createPlayerTitleLabel(String username, String baseText) {
+        Label title = new Label(baseText, skin);
+        title.setColor(Color.WHITE);
+        if (username != null) {
+            playerLabelsByUsername.put(username, title);
+            playerLabelTextByUsername.put(username, baseText);
+        }
+        return title;
+    }
+
+    private void initializePlayerHand(Network.GameStateUpdate initialGameState) {
+        playerHandCards.clear();
+        if (initialGameState != null && initialGameState.playerHandCardIds != null && !initialGameState.playerHandCardIds.isEmpty()) {
+            playerHandCards.addAll(initialGameState.playerHandCardIds);
+            return;
+        }
+
+        for (String cardId : DEFAULT_PLAYER_HAND) {
+            playerHandCards.add(cardId);
+        }
+    }
+
+    private String resolveInitialTopPlayPileCardId(Network.GameStateUpdate initialGameState) {
+        if (initialGameState != null && initialGameState.topPlayPileCardId != null && !initialGameState.topPlayPileCardId.isBlank()) {
+            return initialGameState.topPlayPileCardId;
+        }
+        return pickRandomNumberedCardId();
+    }
+
+    private String resolveInitialTurnUsername(Network.GameStateUpdate initialGameState) {
+        if (initialGameState != null && initialGameState.currentTurnUsername != null && !initialGameState.currentTurnUsername.isBlank()) {
+            return initialGameState.currentTurnUsername;
+        }
+        return playOrder.isEmpty() ? Account.getUsername() : playOrder.get(0).username;
+    }
+
+    private void initializeDisplayedHandCounts(Network.GameStateUpdate initialGameState) {
+        handCountsByUsername.clear();
+        for (Network.LobbyPlayer player : playOrder) {
+            handCountsByUsername.put(player.username, DEFAULT_HAND_SIZE);
+        }
+        String currentUsername = Account.getUsername();
+        if (currentUsername != null) {
+            handCountsByUsername.put(currentUsername, playerHandCards.size());
+        }
+        if (initialGameState != null) {
+            updateDisplayedHandCounts(initialGameState);
+        }
+    }
+
+    private void updateDisplayedHandCounts(Network.GameStateUpdate update) {
+        if (update.playerUsernames == null || update.playerHandCounts == null || update.playerUsernames.size() != update.playerHandCounts.size()) {
+            return;
+        }
+
+        handCountsByUsername.clear();
+        for (int i = 0; i < update.playerUsernames.size(); i++) {
+            handCountsByUsername.put(update.playerUsernames.get(i), update.playerHandCounts.get(i));
+        }
+    }
+
+    private String pickRandomNumberedCardId() {
+        String color = NUMBERED_CARD_COLORS[ThreadLocalRandom.current().nextInt(NUMBERED_CARD_COLORS.length)];
+        int value = ThreadLocalRandom.current().nextInt(NUMBERED_CARD_VARIANTS);
+        return color + "_" + value + "_filled";
+    }
+
+    private void applyGameStateUpdate(Network.GameStateUpdate update) {
+        if (update == null) {
+            return;
+        }
+
+        if (update.topPlayPileCardId != null && !update.topPlayPileCardId.isBlank()) {
+            playPile.placeCard(update.topPlayPileCardId);
+        }
+        if (update.currentTurnUsername != null && !update.currentTurnUsername.isBlank()) {
+            currentTurnUsername = update.currentTurnUsername;
+        }
+        currentPlayerCanDraw = update.currentPlayerCanDraw;
+        turnActionsLocked = update.turnActionsLocked;
+        playerHandCards.clear();
+        if (update.playerHandCardIds != null) {
+            playerHandCards.addAll(update.playerHandCardIds);
+        }
+        updateDisplayedHandCounts(update);
+        pendingTurnSubmission = false;
+        pendingWildColorChoice = false;
+        pendingWildHandIndex = -1;
+        hideWildColorPicker();
+        refreshPlayerHand();
+        refreshSynchronizedUi();
+    }
+
+    private void handleGameEnd(Network.GameEnd end) {
+        if (game == null) {
+            return;
+        }
+        game.switchScreen(new GameEndScreen(game, soundController, end));
+    }
+
+    private void refreshSynchronizedUi() {
+        if (playPileCardActor != null) {
+            playPileCardActor.setCard(playPile.getTopCardId(), false);
+        }
+        refreshHiddenHandTables();
+        refreshPlayerLabels();
+        updateWildColorPickerPosition();
+    }
+
+    private void refreshHiddenHandTables() {
+        for (Map.Entry<String, Table> entry : hiddenHandTablesByUsername.entrySet()) {
+            populateHiddenHand(entry.getValue(), getDisplayedHandCount(entry.getKey()));
+        }
+    }
+
+    private void refreshPlayerLabels() {
+        for (Map.Entry<String, Label> entry : playerLabelsByUsername.entrySet()) {
+            String username = entry.getKey();
+            Label label = entry.getValue();
+            String baseText = playerLabelTextByUsername.getOrDefault(username, username);
+            boolean currentTurn = username != null && username.equals(currentTurnUsername);
+            label.setText(currentTurn ? baseText + " <- Turn" : baseText);
+            label.setColor(currentTurn ? new Color(1f, 0.95f, 0.7f, 1f) : Color.WHITE);
+        }
+    }
+
+    private int getDisplayedHandCount(String username) {
+        if (username != null && username.equals(Account.getUsername())) {
+            return playerHandCards.size();
+        }
+        Integer count = handCountsByUsername.get(username);
+        return count == null ? DEFAULT_HAND_SIZE : count;
+    }
+
+    private void refreshPlayerHand() {
+        if (playerHandTable == null) {
+            return;
+        }
+
+        playerHandTable.clearChildren();
+        for (int i = 0; i < playerHandCards.size(); i++) {
+            playerHandTable.add(new PlayerHandCardActor(i, playerHandCards.get(i), CARD_WIDTH, CARD_HEIGHT)).size(CARD_WIDTH, CARD_HEIGHT);
+        }
+        playerHandTable.invalidateHierarchy();
+    }
+
+    private boolean playerHasPlayableCard() {
+        for (String cardId : playerHandCards) {
+            if (playPile.canAcceptCard(cardId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isLocalPlayersTurn() {
+        String currentUsername = Account.getUsername();
+        return currentUsername != null && currentUsername.equals(currentTurnUsername);
+    }
+
+    private boolean canLocalPlayerPlay() {
+        return isLocalPlayersTurn() && !turnActionsLocked && !pendingTurnSubmission && !pendingWildColorChoice;
+    }
+
+    private boolean canLocalPlayerDraw() {
+        return canLocalPlayerPlay() && currentPlayerCanDraw;
+    }
+
+    private void drawCardsForPlayer() {
+        if (!canLocalPlayerDraw()) {
+            return;
+        }
+
+        pendingTurnSubmission = true;
+        Network.GameTurnActionRequest request = new Network.GameTurnActionRequest();
+        request.actionType = Network.GameTurnActionRequest.ActionType.DRAW_CARD;
+        NetworkManager.sendTCP(request);
+    }
+
+    private void playCardFromHand(int handIndex) {
+        if (!canLocalPlayerPlay()) {
+            return;
+        }
+
+        if (handIndex < 0 || handIndex >= playerHandCards.size()) {
+            return;
+        }
+
+        String playedCardId = playerHandCards.get(handIndex);
+        if (!playPile.canAcceptCard(playedCardId)) {
+            return;
+        }
+
+        if (requiresWildColorChoice(playedCardId)) {
+            promptForWildColor(handIndex);
+            return;
+        }
+        submitPlayCard(handIndex, null);
+    }
+
+    private boolean requiresWildColorChoice(String cardId) {
+        return "change_color".equals(cardId) || "change_color_plus_4".equals(cardId);
+    }
+
+    private void promptForWildColor(int handIndex) {
+        pendingWildColorChoice = true;
+        pendingWildHandIndex = handIndex;
+        if (wildColorPicker != null) {
+            wildColorPicker.setVisible(true);
+            wildColorPicker.setTouchable(Touchable.enabled);
+            wildColorPicker.toFront();
+            updateWildColorPickerPosition();
+        }
+    }
+
+    private void chooseWildColor(String colorId) {
+        if (!pendingWildColorChoice || pendingWildHandIndex < 0 || colorId == null) {
+            return;
+        }
+
+        pendingWildColorChoice = false;
+        hideWildColorPicker();
+        submitPlayCard(pendingWildHandIndex, colorId);
+        pendingWildHandIndex = -1;
+    }
+
+    private void hideWildColorPicker() {
+        if (wildColorPicker != null) {
+            wildColorPicker.setVisible(false);
+            wildColorPicker.setTouchable(Touchable.disabled);
+        }
+    }
+
+    private void updateWildColorPickerPosition() {
+        if (wildColorPicker == null || playPileCardActor == null || !wildColorPicker.isVisible()) {
+            return;
+        }
+
+        temporaryStagePosition.set(playPileCardActor.getWidth() / 2f, playPileCardActor.getHeight());
+        playPileCardActor.localToStageCoordinates(temporaryStagePosition);
+        wildColorPicker.pack();
+        wildColorPicker.setPosition(
+            temporaryStagePosition.x - (wildColorPicker.getWidth() / 2f),
+            temporaryStagePosition.y + 12f
+        );
+    }
+
+    private void submitPlayCard(int handIndex, String chosenColor) {
+        pendingTurnSubmission = true;
+        Network.GameTurnActionRequest request = new Network.GameTurnActionRequest();
+        request.actionType = Network.GameTurnActionRequest.ActionType.PLAY_CARD;
+        request.handIndex = handIndex;
+        request.chosenColor = chosenColor;
+        NetworkManager.sendTCP(request);
     }
 
     private Actor createCardActor(String cardId, boolean hidden, boolean hoverEnabled, float width, float height) {
@@ -418,6 +758,67 @@ public class GameScreen extends Stage {
         return value.length() > 2 ? value.substring(0, 2) : value;
     }
 
+    private static String extractCardColorId(String cardId) {
+        for (String color : NUMBERED_CARD_COLORS) {
+            if (cardId.startsWith(color + "_")) {
+                return color;
+            }
+        }
+        return null;
+    }
+
+    private static Integer extractCardNumber(String cardId) {
+        if (cardId == null) {
+            return null;
+        }
+        String[] parts = cardId.split("_");
+        if (parts.length < 2) {
+            return null;
+        }
+
+        try {
+            return Integer.parseInt(parts[1]);
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    private static String extractCardSymbol(String cardId) {
+        if (cardId == null || cardId.isBlank()) {
+            return null;
+        }
+        if ("change_color".equals(cardId) || "change_color_plus_4".equals(cardId)) {
+            return cardId;
+        }
+
+        String[] parts = cardId.split("_");
+        if (parts.length < 2) {
+            return cardId;
+        }
+
+        int startIndex = extractCardColorId(cardId) == null ? 0 : 1;
+        int endIndex = parts.length;
+        if (endIndex > startIndex && ("filled".equals(parts[endIndex - 1]) || "white".equals(parts[endIndex - 1]))) {
+            endIndex--;
+        }
+        if (startIndex >= endIndex) {
+            return cardId;
+        }
+
+        StringBuilder symbol = new StringBuilder();
+        for (int i = startIndex; i < endIndex; i++) {
+            if (i > startIndex) {
+                symbol.append('_');
+            }
+            symbol.append(parts[i]);
+        }
+        return symbol.toString();
+    }
+
+    private static boolean isAlwaysPlayableCard(String cardId) {
+        return "change_color".equals(cardId) || "change_color_plus_4".equals(cardId);
+    }
+
     private Color getCardColor(String cardId) {
         if (cardId.startsWith("red")) {
             return Color.valueOf("d64045");
@@ -444,10 +845,19 @@ public class GameScreen extends Stage {
 
     public void resize(int width, int height) {
         getViewport().update(width, height, true);
+        updateWildColorPickerPosition();
+    }
+
+    @Override
+    public void act(float delta) {
+        super.act(delta);
+        updateWildColorPickerPosition();
     }
 
     @Override
     public void dispose() {
+        NetworkManager.clearGameStartListener(gameStateListener);
+        NetworkManager.clearGameEndListener(gameEndListener);
         for (Texture texture : disposableTextures) {
             texture.dispose();
         }
@@ -456,14 +866,24 @@ public class GameScreen extends Stage {
     }
 
     private class StaticCardActor extends Image {
+        private final float width;
+        private final float height;
+
         private StaticCardActor(String cardId, boolean hidden, float width, float height) {
             super(loadCardTexture(cardId, hidden));
+            this.width = width;
+            this.height = height;
             setScaling(Scaling.fit);
+            setSize(width, height);
+        }
+
+        private void setCard(String cardId, boolean hidden) {
+            setDrawable(new TextureRegionDrawable(loadCardTexture(cardId, hidden)));
             setSize(width, height);
         }
     }
 
-    private final class HoverCardActor extends StaticCardActor {
+    private class HoverCardActor extends StaticCardActor {
         private HoverCardActor(String cardId, boolean hidden, float width, float height) {
             super(cardId, hidden, width, height);
             setOrigin(width / 2f, height / 2f);
@@ -488,6 +908,72 @@ public class GameScreen extends Stage {
                     addAction(Actions.scaleTo(1f, 1f, CARD_HOVER_DURATION));
                 }
             });
+        }
+    }
+
+    private final class PlayerHandCardActor extends HoverCardActor {
+        private PlayerHandCardActor(int handIndex, String cardId, float width, float height) {
+            super(cardId, false, width, height);
+            addListener(new ClickListener() {
+                @Override
+                public void clicked(InputEvent event, float x, float y) {
+                    if (getTapCount() == 2) {
+                        playCardFromHand(handIndex);
+                    }
+                }
+            });
+        }
+    }
+
+    private final class DrawPileCardActor extends HoverCardActor {
+        private DrawPileCardActor(float width, float height) {
+            super("card_back", true, width, height);
+            addListener(new ClickListener() {
+                @Override
+                public void clicked(InputEvent event, float x, float y) {
+                    if (getTapCount() == 2) {
+                        drawCardsForPlayer();
+                    }
+                }
+            });
+        }
+    }
+
+    private static final class PlayPile {
+        private String topCardId;
+
+        private PlayPile(String initialTopCardId) {
+            topCardId = initialTopCardId;
+        }
+
+        private String getTopCardId() {
+            return topCardId;
+        }
+
+        private boolean canAcceptCard(String cardId) {
+            if (isAlwaysPlayableCard(cardId)) {
+                return true;
+            }
+
+            String topSymbol = extractCardSymbol(topCardId);
+            String playedSymbol = extractCardSymbol(cardId);
+            if (topSymbol != null && topSymbol.equals(playedSymbol)) {
+                return true;
+            }
+
+            String topColor = extractCardColorId(topCardId);
+            String playedColor = extractCardColorId(cardId);
+            if (topColor != null && topColor.equals(playedColor)) {
+                return true;
+            }
+
+            Integer topNumber = extractCardNumber(topCardId);
+            Integer playedNumber = extractCardNumber(cardId);
+            return topNumber != null && topNumber.equals(playedNumber);
+        }
+
+        private void placeCard(String cardId) {
+            topCardId = cardId;
         }
     }
 }

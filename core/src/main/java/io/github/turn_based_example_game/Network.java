@@ -31,6 +31,8 @@ public class Network {
         kryo.register(JoinLobbyByCodeRequest.class);
         kryo.register(JoinPublicLobbyRequest.class);
         kryo.register(LobbyOperationResult.class);
+        kryo.register(GameTurnActionRequest.class);
+        kryo.register(GameTurnActionRequest.ActionType.class);
 
     }
 
@@ -56,8 +58,26 @@ public class Network {
 
     public static class GameStateUpdate {
         public int playerIndex;
+        public String topPlayPileCardId;
+        public String currentTurnUsername;
+        public boolean currentPlayerCanDraw = true;
+        public boolean turnActionsLocked;
+        public ArrayList<String> playerUsernames = new ArrayList<>();
+        public ArrayList<Integer> playerHandCounts = new ArrayList<>();
+        public ArrayList<String> playerHandCardIds = new ArrayList<>();
 
         public GameStateUpdate() {}
+    }
+
+    public static class GameTurnActionRequest {
+        public ActionType actionType;
+        public int handIndex = -1;
+        public String chosenColor;
+
+        public enum ActionType {
+            PLAY_CARD,
+            DRAW_CARD
+        }
     }
 
     public static class JoinGameRequest {

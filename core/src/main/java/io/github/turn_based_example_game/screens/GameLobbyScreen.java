@@ -149,7 +149,7 @@ public class GameLobbyScreen extends Stage {
         };
         gameStartListener = update -> {
             Network.LobbyState lobbySnapshot = latestLobbyState == null ? null : copyLobbyState(latestLobbyState);
-            Gdx.app.postRunnable(() -> game.switchScreen(new GameScreen(game, soundController, lobbySnapshot)));
+            Gdx.app.postRunnable(() -> game.switchScreen(new GameScreen(game, soundController, lobbySnapshot, update)));
         };
         NetworkManager.setLobbyStateListener(lobbyStateListener);
         NetworkManager.setLobbyOperationListener(lobbyOperationListener);

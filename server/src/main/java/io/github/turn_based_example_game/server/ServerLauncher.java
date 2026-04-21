@@ -12,7 +12,7 @@ public class ServerLauncher {
         server.start();
         Database.load();
         GameManager gameManager = new GameManager();
-        LobbyManager lobbyManager = new LobbyManager();
+        LobbyManager lobbyManager = new LobbyManager(gameManager);
         Network.register(server);
 
         try {

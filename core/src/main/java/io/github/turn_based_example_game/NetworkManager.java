@@ -14,6 +14,7 @@ public class NetworkManager {
     private static Runnable lobbyStateListener;
     private static Consumer<Network.LobbyOperationResult> lobbyOperationListener;
     private static Consumer<Network.GameStateUpdate> gameStartListener;
+    private static Consumer<Network.GameEnd> gameEndListener;
 
     public static void initialize() throws IOException {
         client = new Client();
@@ -43,6 +44,12 @@ public class NetworkManager {
                 if (object instanceof Network.GameStateUpdate update) {
                     currentLobby = null;
                     notifyGameStart(update);
+                    return;
+                }
+
+                if (object instanceof Network.GameEnd end) {
+                    currentLobby = null;
+                    notifyGameEnd(end);
                 }
             }
         });
@@ -102,6 +109,11 @@ public class NetworkManager {
         }
         currentLobby = null;
         notifyLobbyStateChanged();
+    }
+
+    public static void leaveGame() {
+        sendTCP(new Network.LeaveGameRequest());
+        currentLobby = null;
     }
 
     public static void toggleReady() {
@@ -178,6 +190,16 @@ public class NetworkManager {
         }
     }
 
+    public static void setGameEndListener(Consumer<Network.GameEnd> listener) {
+        gameEndListener = listener;
+    }
+
+    public static void clearGameEndListener(Consumer<Network.GameEnd> listener) {
+        if (gameEndListener == listener) {
+            gameEndListener = null;
+        }
+    }
+
     private static void notifyLobbyStateChanged() {
         if (lobbyStateListener != null) {
             Gdx.app.postRunnable(lobbyStateListener);
@@ -193,6 +215,12 @@ public class NetworkManager {
     private static void notifyGameStart(Network.GameStateUpdate update) {
         if (gameStartListener != null) {
             Gdx.app.postRunnable(() -> gameStartListener.accept(update));
+        }
+    }
+
+    private static void notifyGameEnd(Network.GameEnd end) {
+        if (gameEndListener != null) {
+            Gdx.app.postRunnable(() -> gameEndListener.accept(end));
         }
     }
 }
