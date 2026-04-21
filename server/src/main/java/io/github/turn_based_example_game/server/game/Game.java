@@ -79,10 +79,6 @@ public class Game {
         simulationScheduler.scheduleAtFixedRate(this::simulate, 0, (long) (TIMESTEP * 1000), TimeUnit.MILLISECONDS);
     }
 
-    public void handleMove(Player player) {
-
-    }
-
     public void dispose() {
         updateSCheduler.shutdown();
         simulationScheduler.shutdown();

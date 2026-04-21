@@ -13,7 +13,7 @@ import io.github.turn_based_example_game.SoundController;
 
 /**
  * Displays the main menu after login. Provides navigation
- * to other parts of the game like settings, leaderboard, game start, etc.
+ * to other parts of the game like settings and game start.
  */
 public class MainMenuScreen extends Stage {
 
@@ -34,7 +34,6 @@ public class MainMenuScreen extends Stage {
         Label usernameLabel = new Label(Account.getUsername(), skin);
 
         TextButton startButton = new TextButton("Start Game", skin);
-        TextButton leaderboardButton = new TextButton("Leaderboard", skin);
         TextButton tutorialButton = new TextButton("Tutorial", skin);
         TextButton settingsButton = new TextButton("Settings", skin);
         TextButton exitButton = new TextButton("Exit", skin);
@@ -55,7 +54,6 @@ public class MainMenuScreen extends Stage {
         table.add(titleLabel).colspan(2).padBottom(10).row();
         table.add(usernameLabel).colspan(2).padBottom(20).row();
         table.add(startButton).width(200).padBottom(10).row();
-        table.add(leaderboardButton).width(200).padBottom(10).row();
         table.add(tutorialButton).width(200).padBottom(10).row();
         table.add(settingsButton).width(200).padBottom(10).row();
         table.add(exitButton).width(200).padBottom(10).row();
@@ -105,14 +103,6 @@ public class MainMenuScreen extends Stage {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 Gdx.app.exit();
-            }
-        });
-
-        // Navigate to Leaderboard screen
-        leaderboardButton.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                Gdx.app.postRunnable(() -> game.switchScreen(new LeaderboardScreen(game, soundController)));
             }
         });
     }

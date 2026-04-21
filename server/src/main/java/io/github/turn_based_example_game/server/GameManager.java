@@ -16,7 +16,7 @@ public class GameManager {
     private List<Account> waitList;
     private List<Account> teamsWaitList;
 
-    public GameManager(com.esotericsoftware.kryonet.Server server) {
+    public GameManager() {
         games = new HashSet<>();
         waitList = new ArrayList<>();
         teamsWaitList = new ArrayList<>();
@@ -30,6 +30,7 @@ public class GameManager {
 
     public void handlePlayerLeave(Account account) {
         waitList.remove(account);
+        teamsWaitList.remove(account);
         account.setInGame(false);
         for(Game game : games){
             if(game.getPlayers().contains(account)){
@@ -82,7 +83,7 @@ public class GameManager {
                 System.out.println(teamsWaitList.size());
                 if(teamsWaitList.size() == 4){
                     System.out.println("GAME ON");
-                    for(Account acc : waitList){
+                    for(Account acc : teamsWaitList){
                         acc.setInGame(true);
                     }
                     List<Player> players = new ArrayList<>(teamsWaitList);

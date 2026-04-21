@@ -11,8 +11,8 @@ public class ServerLauncher {
     public ServerLauncher() {com.esotericsoftware.kryonet.Server server = new com.esotericsoftware.kryonet.Server();
         server.start();
         Database.load();
-        System.out.println(Database.getLeaderboard());
-        GameManager gameManager = new GameManager(server);
+        GameManager gameManager = new GameManager();
+        LobbyManager lobbyManager = new LobbyManager();
         Network.register(server);
 
         try {
@@ -55,14 +55,12 @@ public class ServerLauncher {
                     return;
                 }
 
-                if (object instanceof Network.LeaderboardRequest) {
-                    Network.LeaderboardResponse response = new Network.LeaderboardResponse();
-                    response.leaderboard = Database.getLeaderboard();
-                    connection.sendTCP(response);
-                }
-
                 Account account = Database.findAccount(connection);
                 if(account == null){
+                    return;
+                }
+
+                if (lobbyManager.handlePacket(account, object)) {
                     return;
                 }
 
@@ -75,6 +73,7 @@ public class ServerLauncher {
             public void disconnected(Connection connection) {
                 Account account = Database.findAccount(connection);
                 if(account != null){
+                    lobbyManager.handlePlayerDisconnect(account);
                     gameManager.handlePlayerLeave(account);
                     Database.logOff(connection);
                 }

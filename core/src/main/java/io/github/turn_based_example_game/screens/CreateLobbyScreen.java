@@ -1,6 +1,7 @@
 package io.github.turn_based_example_game.screens;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.ButtonGroup;
@@ -11,6 +12,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import io.github.turn_based_example_game.Main;
 import io.github.turn_based_example_game.Network;
@@ -32,17 +34,18 @@ public class CreateLobbyScreen extends Stage {
         addActor(backgroundImage);
 
         Label screenLabel = new Label("Lobby options", skin);
-        TextButton twoPlayers = new TextButton("2", skin);
-        TextButton threePlayers = new TextButton("3", skin);
-        TextButton fourPlayers = new TextButton("4", skin);
+        TextButton.TextButtonStyle optionButtonStyle = createOptionButtonStyle(skin);
+        TextButton twoPlayers = new TextButton("2", optionButtonStyle);
+        TextButton threePlayers = new TextButton("3", optionButtonStyle);
+        TextButton fourPlayers = new TextButton("4", optionButtonStyle);
         Label maxPlayersLabel = new Label("Maximum Players", skin);
         ButtonGroup<TextButton> maxPlayersButtonGroup = new ButtonGroup<>(twoPlayers, threePlayers, fourPlayers);
-        TextButton privateButton = new TextButton("Private", skin);
-        TextButton publicButton = new TextButton("Public", skin);
+        TextButton privateButton = new TextButton("Private", optionButtonStyle);
+        TextButton publicButton = new TextButton("Public", optionButtonStyle);
         Label lobbyModeLabel = new Label("Lobby Mode", skin);
         ButtonGroup<TextButton> lobbyModeButtonGroup = new ButtonGroup<>(privateButton, publicButton);
-        TextButton yesBotsButton = new TextButton("Yes", skin);
-        TextButton noBotsButton = new TextButton("No", skin);
+        TextButton yesBotsButton = new TextButton("Yes", optionButtonStyle);
+        TextButton noBotsButton = new TextButton("No", optionButtonStyle);
         Label fillWithBotsLabel = new Label("Fill empty spots with Bots", skin);
         ButtonGroup<TextButton> botsButtonGroup = new ButtonGroup<>(yesBotsButton, noBotsButton);
         TextButton createLobbyButton = new TextButton("Create Lobby", skin);
@@ -93,5 +96,28 @@ public class CreateLobbyScreen extends Stage {
                 Gdx.app.postRunnable(() -> game.switchScreen(new JoinGameLobbyScreen(game, soundController)));
             }
         });
+    }
+
+    private TextButton.TextButtonStyle createOptionButtonStyle(Skin skin) {
+        TextButton.TextButtonStyle baseStyle = skin.get(TextButton.TextButtonStyle.class);
+        TextButton.TextButtonStyle optionStyle = new TextButton.TextButtonStyle(baseStyle);
+
+        Drawable defaultButton = skin.newDrawable("default-round", Color.valueOf("8e8e8e"));
+        Drawable hoverButton = skin.newDrawable("default-round", Color.valueOf("a5a5a5"));
+        Drawable pressedButton = skin.newDrawable("default-round-down", Color.valueOf("676767"));
+        Drawable checkedButton = skin.newDrawable("default-round-down", Color.valueOf("4d4d4d"));
+
+        optionStyle.up = defaultButton;
+        optionStyle.over = hoverButton;
+        optionStyle.down = pressedButton;
+        optionStyle.checked = checkedButton;
+        optionStyle.checkedOver = checkedButton;
+        optionStyle.checkedDown = checkedButton;
+        optionStyle.fontColor = Color.WHITE;
+        optionStyle.overFontColor = Color.WHITE;
+        optionStyle.downFontColor = Color.WHITE;
+        optionStyle.checkedFontColor = Color.WHITE;
+
+        return optionStyle;
     }
 }

@@ -43,10 +43,6 @@ public class Database {
         }
     }
 
-    public static PlayerStats[] getLeaderboard(){
-        return playerStats.values().stream().sorted(Comparator.comparingInt(PlayerStats::getWins).reversed()).limit(10).toArray(PlayerStats[]::new);
-    }
-
     public static Map<Connection, Account> getConnections(){
         return connections;
     }
@@ -55,7 +51,10 @@ public class Database {
     }
 
     public static void logOff(Connection connection) {
-        connections.remove(connection);
+        Account account = connections.remove(connection);
+        if (account != null) {
+            account.setInGame(false);
+        }
     }
 
     public static void load() {
@@ -127,6 +126,7 @@ public class Database {
         if (account == null || !account.getPassword().equals(password) || account.getConnection() != null){
             return null;
         }
+        account.setInGame(false);
         connections.put(connection, account);
         return account;
     }

@@ -19,6 +19,8 @@ import io.github.turn_based_example_game.Network;
 import io.github.turn_based_example_game.NetworkManager;
 import io.github.turn_based_example_game.SoundController;
 
+import java.util.function.Consumer;
+
 public class GameLobbyScreen extends Stage {
     private final Main game;
     private final SoundController soundController;
@@ -27,6 +29,14 @@ public class GameLobbyScreen extends Stage {
     private final Table playersTable;
     private final TextButton readyButton;
     private final TextButton startGameButton;
+    private final Label lobbyIdValue;
+    private final Label maxPlayersValue;
+    private final Label lobbyModeValue;
+    private final Label fillWithBotsValue;
+    private final Runnable lobbyStateListener;
+    private final Consumer<Network.LobbyOperationResult> lobbyOperationListener;
+    private final Consumer<Network.GameStateUpdate> gameStartListener;
+    private Network.LobbyState latestLobbyState;
 
     public GameLobbyScreen(Main game, SoundController soundController) {
         super(new ScreenViewport());
@@ -55,8 +65,7 @@ public class GameLobbyScreen extends Stage {
         readyButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                NetworkManager.toggleReady(Account.getUsername());
-                refreshLobby();
+                NetworkManager.toggleReady();
             }
         });
 
@@ -64,19 +73,23 @@ public class GameLobbyScreen extends Stage {
         startGameButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                if (startGameButton.isDisabled()) {
-                    return;
+                if (!startGameButton.isDisabled()) {
+                    NetworkManager.startLobbyGame();
                 }
-                Gdx.app.postRunnable(() -> game.switchScreen(new GameScreen(game, soundController)));
             }
         });
 
-        statusLabel = new Label("", skin);
+        statusLabel = new Label("Waiting for lobby state...", skin);
         statusLabel.setWrap(true);
         statusLabel.setAlignment(Align.center);
 
         playersTable = new Table();
         playersTable.defaults().pad(8f).left();
+
+        lobbyIdValue = new Label("-", skin);
+        maxPlayersValue = new Label("-", skin);
+        lobbyModeValue = new Label("-", skin);
+        fillWithBotsValue = new Label("-", skin);
 
         Table root = new Table();
         root.setFillParent(true);
@@ -86,6 +99,8 @@ public class GameLobbyScreen extends Stage {
         Table topBar = new Table();
         topBar.add(backButton).width(140f).left();
         topBar.add().expandX();
+        topBar.add(new Label("Lobby Code:", skin)).padRight(8f);
+        topBar.add(lobbyIdValue).right();
         root.add(topBar).growX().top().colspan(3).row();
 
         Table leftPanel = new Table(skin);
@@ -107,42 +122,65 @@ public class GameLobbyScreen extends Stage {
         rightPanel.pad(20f);
         rightPanel.defaults().pad(8f).left();
         rightPanel.add(new Label("Settings", skin)).padBottom(18f).row();
+        rightPanel.add(new Label("Max Players:", skin));
+        rightPanel.add(maxPlayersValue).row();
+        rightPanel.add(new Label("Lobby Mode:", skin));
+        rightPanel.add(lobbyModeValue).row();
+        rightPanel.add(new Label("Fill with Bots:", skin));
+        rightPanel.add(fillWithBotsValue).row();
 
         root.add().height(16f).colspan(3).row();
         root.add(leftPanel).width(220f).growY().left().top();
         root.add(centerPanel).expand().fill();
-        root.add(createSettingsPanel(rightPanel)).width(260f).growY().right().top().row();
+        root.add(rightPanel).width(260f).growY().right().top().row();
 
         root.add().height(20f).colspan(3).row();
         root.add(startGameButton).colspan(3).width(240f).height(60f).center().bottom();
 
+        lobbyStateListener = this::refreshLobby;
+        lobbyOperationListener = result -> {
+            if (result.lobbyClosed) {
+                Gdx.app.postRunnable(() -> game.switchScreen(new MainMenuScreen(game, soundController)));
+                return;
+            }
+            if (result.message != null && !result.message.isBlank()) {
+                statusLabel.setText(result.message);
+            }
+        };
+        gameStartListener = update -> {
+            Network.LobbyState lobbySnapshot = latestLobbyState == null ? null : copyLobbyState(latestLobbyState);
+            Gdx.app.postRunnable(() -> game.switchScreen(new GameScreen(game, soundController, lobbySnapshot)));
+        };
+        NetworkManager.setLobbyStateListener(lobbyStateListener);
+        NetworkManager.setLobbyOperationListener(lobbyOperationListener);
+        NetworkManager.setGameStartListener(gameStartListener);
+
         refreshLobby();
-    }
-
-    private Table createSettingsPanel(Table rightPanel) {
-        Network.LobbyState lobbyState = NetworkManager.getCurrentLobby();
-
-        if (lobbyState == null || lobbyState.settings == null) {
-            rightPanel.add(new Label("No lobby data available.", skin)).left().row();
-            return rightPanel;
-        }
-
-        rightPanel.add(new Label("Max Players: " + lobbyState.settings.maxPlayers, skin)).row();
-        rightPanel.add(new Label("Lobby Mode: " + lobbyState.settings.lobbyMode, skin)).row();
-        rightPanel.add(new Label("Fill with Bots: " + (lobbyState.settings.fillWithBots ? "Yes" : "No"), skin)).row();
-        return rightPanel;
     }
 
     private void refreshLobby() {
         Network.LobbyState lobbyState = NetworkManager.getCurrentLobby();
-
         playersTable.clearChildren();
+
         if (lobbyState == null) {
-            statusLabel.setText("Lobby not found.");
+            latestLobbyState = null;
+            lobbyIdValue.setText("-");
+            maxPlayersValue.setText("-");
+            lobbyModeValue.setText("-");
+            fillWithBotsValue.setText("-");
             readyButton.setDisabled(true);
             startGameButton.setDisabled(true);
+            if ("Waiting for lobby state...".contentEquals(statusLabel.getText())) {
+                statusLabel.setText("Waiting for lobby state...");
+            }
             return;
         }
+
+        latestLobbyState = copyLobbyState(lobbyState);
+        lobbyIdValue.setText(lobbyState.lobbyId == null ? "-" : lobbyState.lobbyId);
+        maxPlayersValue.setText(String.valueOf(lobbyState.settings.maxPlayers));
+        lobbyModeValue.setText(lobbyState.settings.lobbyMode);
+        fillWithBotsValue.setText(lobbyState.settings.fillWithBots ? "Yes" : "No");
 
         for (Network.LobbyPlayer player : lobbyState.players) {
             String readiness = player.ready ? "READY" : "NOT READY";
@@ -166,10 +204,12 @@ public class GameLobbyScreen extends Stage {
             }
         }
 
+        readyButton.setDisabled(false);
         readyButton.setText(currentPlayerReady ? "Unready" : "Ready up");
 
         boolean isOwner = NetworkManager.isLobbyOwner(currentUsername);
         boolean allPlayersReady = NetworkManager.areAllPlayersReady();
+        startGameButton.setVisible(isOwner);
         startGameButton.setDisabled(!isOwner || !allPlayersReady);
 
         if (!isOwner) {
@@ -179,5 +219,44 @@ public class GameLobbyScreen extends Stage {
         } else {
             statusLabel.setText("Start Game unlocks when every player in the lobby is ready.");
         }
+    }
+
+    private Network.LobbyState copyLobbyState(Network.LobbyState source) {
+        Network.LobbyState copy = new Network.LobbyState();
+        copy.lobbyId = source.lobbyId;
+        copy.settings = copyLobbySettings(source.settings);
+        for (Network.LobbyPlayer player : source.players) {
+            copy.players.add(copyLobbyPlayer(player));
+        }
+        return copy;
+    }
+
+    private Network.LobbySettings copyLobbySettings(Network.LobbySettings source) {
+        Network.LobbySettings copy = new Network.LobbySettings();
+        if (source == null) {
+            return copy;
+        }
+        copy.maxPlayers = source.maxPlayers;
+        copy.lobbyMode = source.lobbyMode;
+        copy.fillWithBots = source.fillWithBots;
+        return copy;
+    }
+
+    private Network.LobbyPlayer copyLobbyPlayer(Network.LobbyPlayer source) {
+        Network.LobbyPlayer copy = new Network.LobbyPlayer();
+        copy.username = source.username;
+        copy.ready = source.ready;
+        copy.owner = source.owner;
+        copy.bot = source.bot;
+        return copy;
+    }
+
+    @Override
+    public void dispose() {
+        NetworkManager.clearLobbyStateListener(lobbyStateListener);
+        NetworkManager.clearLobbyOperationListener(lobbyOperationListener);
+        NetworkManager.clearGameStartListener(gameStartListener);
+        skin.dispose();
+        super.dispose();
     }
 }

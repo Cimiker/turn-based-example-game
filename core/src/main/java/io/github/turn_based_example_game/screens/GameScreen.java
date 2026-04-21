@@ -5,32 +5,55 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.scenes.scene2d.Actor;
+import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.Touchable;
+import com.badlogic.gdx.scenes.scene2d.actions.Actions;
 import com.badlogic.gdx.scenes.scene2d.ui.Image;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.utils.Scaling;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
+import io.github.turn_based_example_game.Account;
 import io.github.turn_based_example_game.Main;
+import io.github.turn_based_example_game.Network;
+import io.github.turn_based_example_game.NetworkManager;
 import io.github.turn_based_example_game.SoundController;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class GameScreen extends Stage {
+    private static final String CARD_ASSET_ROOT = "UnoCards/sprites/";
     private static final float CARD_WIDTH = 92f;
     private static final float CARD_HEIGHT = 138f;
-    private static final float OPPONENT_CARD_SCALE = 0.72f;
+    private static final float OPPONENT_CARD_SCALE = 0.62f;
+    private static final float DRAW_PILE_SCALE = 0.72f;
+    private static final int DISPLAY_PLAYER_COUNT = 4;
+    private static final int DEFAULT_HAND_SIZE = 7;
+    private static final float CARD_HOVER_SCALE = 1.08f;
+    private static final float CARD_HOVER_DURATION = 0.08f;
 
     private final Array<Texture> disposableTextures = new Array<>();
     private final Skin skin;
+    private final List<Network.LobbyPlayer> playOrder = new ArrayList<>();
 
     public GameScreen() {
-        this(null, null);
+        this(null, null, null);
     }
 
     public GameScreen(Main game, SoundController soundController) {
+        this(game, soundController, null);
+    }
+
+    public GameScreen(Main game, SoundController soundController, Network.LobbyState lobbyState) {
         super(new ScreenViewport());
         skin = new Skin(Gdx.files.internal("uiskin.json"));
+        playOrder.addAll(buildPlayOrder(lobbyState != null ? lobbyState : NetworkManager.getCurrentLobby()));
         buildBoard();
         Gdx.input.setInputProcessor(this);
     }
@@ -47,29 +70,67 @@ public class GameScreen extends Stage {
         Table root = new Table();
         root.setFillParent(true);
         root.pad(24f);
+        root.defaults().pad(12f);
         addActor(root);
 
-        root.add(createOpponentArea()).growX().top().padBottom(32f).row();
-        root.add(createCenterArea()).expand().center().row();
-        root.add(createPlayerArea()).growX().bottom().padTop(32f);
+        root.add(createTopRow()).growX().top().row();
+        root.add(createMiddleRow()).expand().fill().row();
+        root.add(createBottomRow()).growX().bottom();
     }
 
-    private Table createOpponentArea() {
+    private Table createTopRow() {
+        float drawZoneWidth = (CARD_WIDTH * DRAW_PILE_SCALE) + 64f;
+        Table row = new Table();
+        row.add().width(drawZoneWidth);
+        row.add(createOpponentArea(getPlayerAtSeat(2))).expandX().center().top();
+        row.add(createDrawPileArea()).width(drawZoneWidth).right().top();
+        return row;
+    }
+
+    private Table createMiddleRow() {
+        Table row = new Table();
+        row.defaults().pad(12f);
+        row.add(createSideOpponentArea(getPlayerAtSeat(3))).width(220f).expandY().left();
+        row.add(createCenterArea()).expand().center();
+        row.add(createSideOpponentArea(getPlayerAtSeat(1))).width(220f).expandY().right();
+        return row;
+    }
+
+    private Table createBottomRow() {
+        Table row = new Table();
+        row.add(createPlayerArea(getPlayerAtSeat(0))).center().bottom();
+        return row;
+    }
+
+    private Table createOpponentArea(Network.LobbyPlayer player) {
         Table section = new Table();
         section.defaults().pad(4f);
 
-        Label title = new Label("Opponent", skin);
+        if (player == null) {
+            return section;
+        }
+
+        Label title = new Label(getPlayerLabel(player), skin);
         title.setColor(Color.WHITE);
         section.add(title).padBottom(10f).row();
 
-        Table cards = new Table();
-        cards.defaults().padLeft(-34f);
-        for (int i = 0; i < 7; i++) {
-            Actor card = createCardActor("back", true, CARD_WIDTH * OPPONENT_CARD_SCALE, CARD_HEIGHT * OPPONENT_CARD_SCALE);
-            cards.add(card).size(CARD_WIDTH * OPPONENT_CARD_SCALE, CARD_HEIGHT * OPPONENT_CARD_SCALE);
+        section.add(createHiddenHand(DEFAULT_HAND_SIZE)).center();
+        return section;
+    }
+
+    private Table createSideOpponentArea(Network.LobbyPlayer player) {
+        Table section = new Table();
+        section.defaults().pad(4f);
+
+        if (player == null) {
+            return section;
         }
 
-        section.add(cards);
+        Label title = new Label(getPlayerLabel(player), skin);
+        title.setColor(Color.WHITE);
+        title.setWrap(true);
+        section.add(title).width(200f).center().padBottom(10f).row();
+        section.add(createHiddenHand(DEFAULT_HAND_SIZE)).center();
         return section;
     }
 
@@ -77,17 +138,22 @@ public class GameScreen extends Stage {
         Table section = new Table();
         section.defaults().pad(10f);
 
-        Label title = new Label("Center Stack", skin);
+        Label title = new Label("Play Pile", skin);
         title.setColor(new Color(1f, 0.95f, 0.7f, 1f));
-        section.add(title).colspan(2).padBottom(12f).row();
-
-        section.add(createPile("Draw Pile", "back")).size(CARD_WIDTH + 14f, CARD_HEIGHT + 38f);
-        section.add(createPile("Discard", "wild_draw_four")).size(CARD_WIDTH + 14f, CARD_HEIGHT + 38f);
+        section.add(title).padBottom(12f).row();
+        section.add(createPile("Play Pile", "change_color_plus_4", false, false, CARD_WIDTH, CARD_HEIGHT))
+            .size(CARD_WIDTH + 14f, CARD_HEIGHT + 38f);
 
         return section;
     }
 
-    private Table createPile(String labelText, String cardId) {
+    private Table createDrawPileArea() {
+        float drawWidth = CARD_WIDTH * DRAW_PILE_SCALE;
+        float drawHeight = CARD_HEIGHT * DRAW_PILE_SCALE;
+        return createPile("Draw Pile", "card_back", true, true, drawWidth, drawHeight);
+    }
+
+    private Table createPile(String labelText, String cardId, boolean hidden, boolean hoverEnabled, float cardWidth, float cardHeight) {
         Table pile = new Table();
         pile.defaults().pad(4f);
 
@@ -98,41 +164,132 @@ public class GameScreen extends Stage {
         Label label = new Label(labelText, skin);
         label.setColor(Color.WHITE);
 
-        pile.add(createCardActor(cardId, false, CARD_WIDTH, CARD_HEIGHT)).size(CARD_WIDTH, CARD_HEIGHT).row();
+        pile.add(createCardActor(cardId, hidden, hoverEnabled, cardWidth, cardHeight)).size(cardWidth, cardHeight).row();
         pile.add(label).padTop(4f);
         return pile;
     }
 
-    private Table createPlayerArea() {
+    private Table createPlayerArea(Network.LobbyPlayer player) {
         Table section = new Table();
         section.defaults().pad(4f);
 
-        Label title = new Label("Your Hand", skin);
+        String labelText = player == null ? "Your Hand" : getPlayerLabel(player);
+        Label title = new Label(labelText, skin);
         title.setColor(Color.WHITE);
         section.add(title).padBottom(12f).row();
 
         Table cards = new Table();
         cards.defaults().padLeft(-30f);
 
-        String[] hand = {"red_7", "yellow_2", "blue_skip", "green_reverse", "wild", "red_draw_two", "blue_9"};
+        String[] hand = {
+            "red_7_filled",
+            "yellow_2_white",
+            "blue_skip_filled",
+            "green_switch_order_white",
+            "change_color",
+            "red_plus_2_filled",
+            "blue_9_white"
+        };
         for (String cardId : hand) {
-            cards.add(createCardActor(cardId, false, CARD_WIDTH, CARD_HEIGHT)).size(CARD_WIDTH, CARD_HEIGHT);
+            cards.add(createCardActor(cardId, false, true, CARD_WIDTH, CARD_HEIGHT)).size(CARD_WIDTH, CARD_HEIGHT);
         }
 
         section.add(cards).bottom();
         return section;
     }
 
-    private Actor createCardActor(String cardId, boolean hidden, float width, float height) {
-        String texturePath = hidden ? "cards/back.png" : "cards/" + cardId + ".png";
-        Texture texture = Gdx.files.internal(texturePath).exists()
-            ? trackTexture(new Texture(Gdx.files.internal(texturePath)))
-            : createPlaceholderCardTexture(cardId, hidden);
+    private Table createHiddenHand(int cardCount) {
+        Table cards = new Table();
+        cards.defaults().padLeft(-30f);
+        float width = CARD_WIDTH * OPPONENT_CARD_SCALE;
+        float height = CARD_HEIGHT * OPPONENT_CARD_SCALE;
+        for (int i = 0; i < cardCount; i++) {
+            Actor card = createCardActor("card_back", true, false, width, height);
+            cards.add(card).size(width, height);
+        }
+        return cards;
+    }
 
-        Image image = new Image(texture);
-        image.setScaling(com.badlogic.gdx.utils.Scaling.fit);
-        image.setSize(width, height);
-        return image;
+    private List<Network.LobbyPlayer> buildPlayOrder(Network.LobbyState lobbyState) {
+        List<Network.LobbyPlayer> orderedPlayers = new ArrayList<>();
+        if (lobbyState != null) {
+            int limit = lobbyState.settings == null ? DISPLAY_PLAYER_COUNT : Math.min(DISPLAY_PLAYER_COUNT, Math.max(1, lobbyState.settings.maxPlayers));
+            for (Network.LobbyPlayer player : lobbyState.players) {
+                if (orderedPlayers.size() >= limit) {
+                    break;
+                }
+                orderedPlayers.add(copyPlayer(player));
+            }
+        }
+
+        if (orderedPlayers.isEmpty()) {
+            orderedPlayers.add(createLocalFallbackPlayer());
+            return orderedPlayers;
+        }
+
+        String currentUsername = Account.getUsername();
+        int localIndex = -1;
+        for (int i = 0; i < orderedPlayers.size(); i++) {
+            if (currentUsername != null && currentUsername.equals(orderedPlayers.get(i).username)) {
+                localIndex = i;
+                break;
+            }
+        }
+
+        if (localIndex <= 0) {
+            return orderedPlayers;
+        }
+
+        List<Network.LobbyPlayer> rotatedPlayers = new ArrayList<>(orderedPlayers.size());
+        for (int i = 0; i < orderedPlayers.size(); i++) {
+            rotatedPlayers.add(copyPlayer(orderedPlayers.get((localIndex + i) % orderedPlayers.size())));
+        }
+        return rotatedPlayers;
+    }
+
+    private Network.LobbyPlayer getPlayerAtSeat(int seatIndex) {
+        if (seatIndex < 0 || seatIndex >= playOrder.size()) {
+            return null;
+        }
+        return playOrder.get(seatIndex);
+    }
+
+    private Network.LobbyPlayer createLocalFallbackPlayer() {
+        Network.LobbyPlayer player = new Network.LobbyPlayer();
+        player.username = Account.getUsername() == null ? "You" : Account.getUsername();
+        player.bot = false;
+        return player;
+    }
+
+    private Network.LobbyPlayer copyPlayer(Network.LobbyPlayer source) {
+        Network.LobbyPlayer copy = new Network.LobbyPlayer();
+        copy.username = source.username;
+        copy.ready = source.ready;
+        copy.owner = source.owner;
+        copy.bot = source.bot;
+        return copy;
+    }
+
+    private String getPlayerLabel(Network.LobbyPlayer player) {
+        String currentUsername = Account.getUsername();
+        if (!player.bot && currentUsername != null && currentUsername.equals(player.username)) {
+            return "You";
+        }
+        return player.bot ? player.username + " [Bot]" : player.username;
+    }
+
+    private Actor createCardActor(String cardId, boolean hidden, boolean hoverEnabled, float width, float height) {
+        return hoverEnabled
+            ? new HoverCardActor(cardId, hidden, width, height)
+            : new StaticCardActor(cardId, hidden, width, height);
+    }
+
+    private Texture loadCardTexture(String cardId, boolean hidden) {
+        String resolvedCardId = hidden ? "card_back" : cardId;
+        String texturePath = CARD_ASSET_ROOT + resolvedCardId + ".png";
+        return Gdx.files.internal(texturePath).exists()
+            ? trackTexture(new Texture(Gdx.files.internal(texturePath)))
+            : createPlaceholderCardTexture(resolvedCardId, hidden);
     }
 
     private Texture createBoardBackgroundTexture() {
@@ -296,5 +453,41 @@ public class GameScreen extends Stage {
         }
         skin.dispose();
         super.dispose();
+    }
+
+    private class StaticCardActor extends Image {
+        private StaticCardActor(String cardId, boolean hidden, float width, float height) {
+            super(loadCardTexture(cardId, hidden));
+            setScaling(Scaling.fit);
+            setSize(width, height);
+        }
+    }
+
+    private final class HoverCardActor extends StaticCardActor {
+        private HoverCardActor(String cardId, boolean hidden, float width, float height) {
+            super(cardId, hidden, width, height);
+            setOrigin(width / 2f, height / 2f);
+            setTouchable(Touchable.enabled);
+            addListener(new InputListener() {
+                @Override
+                public void enter(InputEvent event, float x, float y, int pointer, Actor fromActor) {
+                    if (pointer != -1) {
+                        return;
+                    }
+                    toFront();
+                    clearActions();
+                    addAction(Actions.scaleTo(CARD_HOVER_SCALE, CARD_HOVER_SCALE, CARD_HOVER_DURATION));
+                }
+
+                @Override
+                public void exit(InputEvent event, float x, float y, int pointer, Actor toActor) {
+                    if (pointer != -1) {
+                        return;
+                    }
+                    clearActions();
+                    addAction(Actions.scaleTo(1f, 1f, CARD_HOVER_DURATION));
+                }
+            });
+        }
     }
 }

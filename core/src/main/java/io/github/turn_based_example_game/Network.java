@@ -21,13 +21,16 @@ public class Network {
         kryo.register(Class.class);
         kryo.register(Class[].class);
         kryo.register(LeaveGameRequest.class);
-        kryo.register(PlayerStats.class);
-        kryo.register(PlayerStats[].class);
-        kryo.register(LeaderboardResponse.class);
-        kryo.register(LeaderboardRequest.class);
         kryo.register(LobbySettings.class);
         kryo.register(LobbyPlayer.class);
         kryo.register(LobbyState.class);
+        kryo.register(CreateLobbyRequest.class);
+        kryo.register(ToggleLobbyReadyRequest.class);
+        kryo.register(LeaveLobbyRequest.class);
+        kryo.register(StartLobbyGameRequest.class);
+        kryo.register(JoinLobbyByCodeRequest.class);
+        kryo.register(JoinPublicLobbyRequest.class);
+        kryo.register(LobbyOperationResult.class);
 
     }
 
@@ -72,14 +75,6 @@ public class Network {
 
     }
 
-    public static class LeaderboardRequest {
-
-    }
-
-    public static class LeaderboardResponse {
-        public PlayerStats[] leaderboard;
-    }
-
     public static class LobbySettings {
         public int maxPlayers;
         public String lobbyMode;
@@ -94,7 +89,39 @@ public class Network {
     }
 
     public static class LobbyState {
+        public String lobbyId;
         public LobbySettings settings;
         public ArrayList<LobbyPlayer> players = new ArrayList<>();
+    }
+
+    public static class CreateLobbyRequest {
+        public LobbySettings settings;
+    }
+
+    public static class ToggleLobbyReadyRequest {
+
+    }
+
+    public static class LeaveLobbyRequest {
+
+    }
+
+    public static class StartLobbyGameRequest {
+
+    }
+
+    public static class JoinLobbyByCodeRequest {
+        public String lobbyId;
+    }
+
+    public static class JoinPublicLobbyRequest {
+
+    }
+
+    public static class LobbyOperationResult {
+        public boolean success;
+        public boolean lobbyClosed;
+        public String message;
+        public LobbyState lobbyState;
     }
 }
