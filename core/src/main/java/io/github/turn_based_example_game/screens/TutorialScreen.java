@@ -73,6 +73,10 @@ public class TutorialScreen extends Stage {
             Special cards can be stacked to avoid their effects.
             When at any point you have two cards in your hand you must call DUO. If other players manage to do so before you, you must face the consequences.\s
             Meaning you must pick up some cards. Shock, I know.
+
+            Credits:
+            Card art by JaooPhez from Itch.io
+            Background image by Starline from Freepik
             """;
 
         // Add UI elements to their tables
