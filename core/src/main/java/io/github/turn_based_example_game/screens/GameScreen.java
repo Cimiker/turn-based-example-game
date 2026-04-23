@@ -40,6 +40,7 @@ public class GameScreen extends Stage {
     private static final float CARD_HEIGHT = 138f;
     private static final float OPPONENT_CARD_SCALE = 0.62f;
     private static final float DRAW_PILE_SCALE = 0.72f;
+    private static final float DUO_OVERLAY_DURATION_SECONDS = 5f;
     private static final int DISPLAY_PLAYER_COUNT = 4;
     private static final int DEFAULT_HAND_SIZE = 7;
     private static final float CARD_HOVER_SCALE = 1.08f;
@@ -69,15 +70,22 @@ public class GameScreen extends Stage {
     private final Map<String, String> playerLabelTextByUsername = new HashMap<>();
     private final Consumer<Network.GameStateUpdate> gameStateListener;
     private final Consumer<Network.GameEnd> gameEndListener;
+    private final Consumer<Network.GameDuoEvent> gameDuoListener;
     private final Vector2 temporaryStagePosition = new Vector2();
 
     private Table playerHandTable;
     private Table wildColorPicker;
+    private TextButton duoButton;
+    private Image duoOverlayImage;
     private StaticCardActor playPileCardActor;
+    private boolean serverShowDuoButton;
     private boolean currentPlayerCanDraw = true;
     private boolean turnActionsLocked;
     private boolean pendingTurnSubmission;
     private boolean pendingWildColorChoice;
+    private boolean pendingDuoAnnouncement;
+    private boolean pendingDuoAfterPlay;
+    private boolean duoOverlayActive;
     private String currentTurnUsername;
     private int pendingWildHandIndex = -1;
 
@@ -106,13 +114,16 @@ public class GameScreen extends Stage {
         if (initialGameState != null) {
             currentPlayerCanDraw = initialGameState.currentPlayerCanDraw;
             turnActionsLocked = initialGameState.turnActionsLocked;
+            serverShowDuoButton = initialGameState.showDuoButton;
         }
         buildBoard();
         refreshSynchronizedUi();
         gameStateListener = this::applyGameStateUpdate;
         gameEndListener = this::handleGameEnd;
+        gameDuoListener = this::handleGameDuo;
         NetworkManager.setGameStartListener(gameStateListener);
         NetworkManager.setGameEndListener(gameEndListener);
+        NetworkManager.setGameDuoListener(gameDuoListener);
         Gdx.input.setInputProcessor(this);
     }
 
@@ -137,6 +148,12 @@ public class GameScreen extends Stage {
 
         wildColorPicker = createWildColorPicker();
         addActor(wildColorPicker);
+
+        duoButton = createDuoButton();
+        addActor(duoButton);
+        duoOverlayImage = createDuoOverlayImage();
+        addActor(duoOverlayImage);
+        duoOverlayImage.toFront();
     }
 
     private Table createTopRow() {
@@ -200,10 +217,6 @@ public class GameScreen extends Stage {
     private Table createCenterArea() {
         Table section = new Table();
         section.defaults().pad(10f);
-
-        Label title = new Label("Play Pile", skin);
-        title.setColor(new Color(1f, 0.95f, 0.7f, 1f));
-        section.add(title).padBottom(12f).row();
         playPileCardActor = new StaticCardActor(playPile.getTopCardId(), false, CARD_WIDTH, CARD_HEIGHT);
         section.add(createPile("Play Pile", playPileCardActor, CARD_WIDTH, CARD_HEIGHT))
             .size(CARD_WIDTH + 14f, CARD_HEIGHT + 38f);
@@ -235,6 +248,31 @@ public class GameScreen extends Stage {
             }
         });
         return button;
+    }
+
+    private TextButton createDuoButton() {
+        TextButton button = new TextButton("DUO", skin);
+        button.getLabel().setFontScale(1.35f);
+        button.setSize(150f, 72f);
+        button.setPosition(24f, 24f);
+        button.setVisible(false);
+        button.setTouchable(Touchable.disabled);
+        button.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                announceDuo();
+            }
+        });
+        return button;
+    }
+
+    private Image createDuoOverlayImage() {
+        Texture texture = trackTexture(new Texture(Gdx.files.internal(CARD_ASSET_ROOT + "duo.png")));
+        Image image = new Image(texture);
+        image.setSize(170f, 170f);
+        image.setVisible(false);
+        image.setTouchable(Touchable.disabled);
+        return image;
     }
 
     private Table createDrawPileArea() {
@@ -442,10 +480,12 @@ public class GameScreen extends Stage {
         }
         currentPlayerCanDraw = update.currentPlayerCanDraw;
         turnActionsLocked = update.turnActionsLocked;
+        serverShowDuoButton = update.showDuoButton;
         playerHandCards.clear();
         if (update.playerHandCardIds != null) {
             playerHandCards.addAll(update.playerHandCardIds);
         }
+        pendingDuoAfterPlay = false;
         updateDisplayedHandCounts(update);
         pendingTurnSubmission = false;
         pendingWildColorChoice = false;
@@ -468,6 +508,7 @@ public class GameScreen extends Stage {
         }
         refreshHiddenHandTables();
         refreshPlayerLabels();
+        updateDuoButtonState();
         updateWildColorPickerPosition();
     }
 
@@ -494,6 +535,81 @@ public class GameScreen extends Stage {
         }
         Integer count = handCountsByUsername.get(username);
         return count == null ? DEFAULT_HAND_SIZE : count;
+    }
+
+    private void updateDuoButtonState() {
+        if (duoButton == null) {
+            return;
+        }
+
+        if (duoOverlayActive || pendingDuoAnnouncement || pendingDuoAfterPlay) {
+            duoButton.setVisible(false);
+            duoButton.setTouchable(Touchable.disabled);
+            return;
+        }
+
+        boolean shouldShow = serverShowDuoButton;
+        duoButton.setVisible(shouldShow);
+        duoButton.setTouchable(shouldShow ? Touchable.enabled : Touchable.disabled);
+        if (shouldShow) {
+            duoButton.toFront();
+        }
+    }
+
+    private void announceDuo() {
+        if (pendingDuoAnnouncement || pendingDuoAfterPlay || duoOverlayActive) {
+            return;
+        }
+
+        if (shouldDelayDuoAnnouncement()) {
+            pendingDuoAfterPlay = true;
+            updateDuoButtonState();
+            return;
+        }
+
+        sendDuoAnnouncement();
+    }
+
+    private boolean shouldDelayDuoAnnouncement() {
+        return isLocalPlayersTurn() && playerHandCards.size() == 3 && playerHasPlayableCard();
+    }
+
+    private void sendDuoAnnouncement() {
+        pendingDuoAfterPlay = false;
+        pendingDuoAnnouncement = true;
+        updateDuoButtonState();
+        NetworkManager.sendTCP(new Network.GameDuoRequest());
+    }
+
+    private void showDuoOverlay() {
+        if (duoOverlayImage == null || duoOverlayActive) {
+            return;
+        }
+
+        pendingDuoAnnouncement = false;
+        duoOverlayActive = true;
+        updateDuoButtonState();
+        updateDuoOverlayPosition();
+        duoOverlayImage.clearActions();
+        duoOverlayImage.setVisible(true);
+        duoOverlayImage.toFront();
+        duoOverlayImage.addAction(Actions.sequence(
+            Actions.delay(DUO_OVERLAY_DURATION_SECONDS),
+            Actions.run(() -> {
+                duoOverlayImage.setVisible(false);
+                duoOverlayActive = false;
+                updateDuoButtonState();
+            })
+        ));
+    }
+
+    private void handleGameDuo(Network.GameDuoEvent duoEvent) {
+        if (duoEvent == null) {
+            pendingDuoAnnouncement = false;
+            updateDuoButtonState();
+            return;
+        }
+        showDuoOverlay();
     }
 
     private void refreshPlayerHand() {
@@ -616,6 +732,9 @@ public class GameScreen extends Stage {
         request.handIndex = handIndex;
         request.chosenColor = chosenColor;
         NetworkManager.sendTCP(request);
+        if (pendingDuoAfterPlay) {
+            sendDuoAnnouncement();
+        }
     }
 
     private Actor createCardActor(String cardId, boolean hidden, boolean hoverEnabled, float width, float height) {
@@ -846,18 +965,40 @@ public class GameScreen extends Stage {
     public void resize(int width, int height) {
         getViewport().update(width, height, true);
         updateWildColorPickerPosition();
+        updateDuoButtonPosition();
+        updateDuoOverlayPosition();
     }
 
     @Override
     public void act(float delta) {
         super.act(delta);
         updateWildColorPickerPosition();
+        updateDuoButtonPosition();
+        updateDuoOverlayPosition();
+    }
+
+    private void updateDuoButtonPosition() {
+        if (duoButton == null) {
+            return;
+        }
+        duoButton.setPosition(24f, 24f);
+    }
+
+    private void updateDuoOverlayPosition() {
+        if (duoOverlayImage == null) {
+            return;
+        }
+        duoOverlayImage.setPosition(
+            getViewport().getWorldWidth() - duoOverlayImage.getWidth() - 24f,
+            24f
+        );
     }
 
     @Override
     public void dispose() {
         NetworkManager.clearGameStartListener(gameStateListener);
         NetworkManager.clearGameEndListener(gameEndListener);
+        NetworkManager.clearGameDuoListener(gameDuoListener);
         for (Texture texture : disposableTextures) {
             texture.dispose();
         }

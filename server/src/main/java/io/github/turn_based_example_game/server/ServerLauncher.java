@@ -8,6 +8,7 @@ import java.io.IOException;
 /** Launches the server application. */
 public class ServerLauncher {
 
+
     public ServerLauncher() {com.esotericsoftware.kryonet.Server server = new com.esotericsoftware.kryonet.Server();
         server.start();
         Database.load();

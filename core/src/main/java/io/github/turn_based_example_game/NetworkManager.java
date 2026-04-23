@@ -15,6 +15,7 @@ public class NetworkManager {
     private static Consumer<Network.LobbyOperationResult> lobbyOperationListener;
     private static Consumer<Network.GameStateUpdate> gameStartListener;
     private static Consumer<Network.GameEnd> gameEndListener;
+    private static Consumer<Network.GameDuoEvent> gameDuoListener;
 
     public static void initialize() throws IOException {
         client = new Client();
@@ -50,6 +51,11 @@ public class NetworkManager {
                 if (object instanceof Network.GameEnd end) {
                     currentLobby = null;
                     notifyGameEnd(end);
+                    return;
+                }
+
+                if (object instanceof Network.GameDuoEvent duoEvent) {
+                    notifyGameDuo(duoEvent);
                 }
             }
         });
@@ -200,6 +206,16 @@ public class NetworkManager {
         }
     }
 
+    public static void setGameDuoListener(Consumer<Network.GameDuoEvent> listener) {
+        gameDuoListener = listener;
+    }
+
+    public static void clearGameDuoListener(Consumer<Network.GameDuoEvent> listener) {
+        if (gameDuoListener == listener) {
+            gameDuoListener = null;
+        }
+    }
+
     private static void notifyLobbyStateChanged() {
         if (lobbyStateListener != null) {
             Gdx.app.postRunnable(lobbyStateListener);
@@ -221,6 +237,12 @@ public class NetworkManager {
     private static void notifyGameEnd(Network.GameEnd end) {
         if (gameEndListener != null) {
             Gdx.app.postRunnable(() -> gameEndListener.accept(end));
+        }
+    }
+
+    private static void notifyGameDuo(Network.GameDuoEvent duoEvent) {
+        if (gameDuoListener != null) {
+            Gdx.app.postRunnable(() -> gameDuoListener.accept(duoEvent));
         }
     }
 }

@@ -25,6 +25,7 @@ public class GameManager {
     private static final int DEFAULT_HAND_SIZE = 7;
     private static final long DRAW_STEP_DELAY_MS = 250L;
     private static final long GAME_END_DELAY_MS = 500L;
+    private static final long BOT_DUO_DELAY_MS = 2000L;
 
     private final Random random = new Random();
     private final Opponent opponent = new Opponent();
@@ -97,6 +98,7 @@ public class GameManager {
         session.turnDirection = 1;
         session.currentPlayerCanDraw = true;
         session.turnActionsLocked = false;
+        refreshPlayersWithTwoCards(session);
         lobbyGames.add(session);
         broadcastLobbyGameState(session);
         resolveCurrentTurn(session);
@@ -110,6 +112,11 @@ public class GameManager {
 
         if (object instanceof Network.GameTurnActionRequest request) {
             handleTurnAction(account, request);
+            return;
+        }
+
+        if (object instanceof Network.GameDuoRequest) {
+            handleGameDuo(account);
             return;
         }
 
@@ -178,6 +185,20 @@ public class GameManager {
         }
     }
 
+    private void handleGameDuo(Account account) {
+        LobbyGameSession session = lobbyGamesByAccount.get(account);
+        if (session == null) {
+            return;
+        }
+
+        LobbyGamePlayer caller = findPlayerByAccount(session, account);
+        if (caller == null || session.players.isEmpty()) {
+            return;
+        }
+
+        processDuoCall(session, caller, false);
+    }
+
     private void handleHumanPlay(LobbyGameSession session, LobbyGamePlayer currentPlayer, Network.GameTurnActionRequest request) {
         if (request.handIndex < 0 || request.handIndex >= currentPlayer.handCardIds.size()) {
             return;
@@ -194,6 +215,7 @@ public class GameManager {
         }
 
         currentPlayer.handCardIds.remove(request.handIndex);
+        refreshPlayersWithTwoCards(session);
         session.topPlayPileCardId = resolvedPlayPileCardId;
         if (currentPlayer.handCardIds.isEmpty()) {
             broadcastLobbyGameState(session);
@@ -204,6 +226,7 @@ public class GameManager {
         session.pendingDrawCount = extractDrawPenalty(resolvedPlayPileCardId);
         advanceToNextTurn(session, extractTurnAdvanceCount(resolvedPlayPileCardId));
         broadcastLobbyGameState(session);
+        maybeHandleBotDuoCallout(session);
         resolveCurrentTurn(session);
     }
 
@@ -216,6 +239,7 @@ public class GameManager {
             drawCardToPlayer(session, currentPlayer);
             advanceToNextTurn(session);
             broadcastLobbyGameState(session);
+            maybeHandleBotDuoCallout(session);
             resolveCurrentTurn(session);
             return;
         }
@@ -266,18 +290,21 @@ public class GameManager {
         session.currentPlayerCanDraw = true;
         session.turnActionsLocked = false;
         broadcastLobbyGameState(session);
+        maybeHandleBotDuoCallout(session);
     }
 
     private void resolveBotTurns(LobbyGameSession session) {
         int safetyCounter = 0;
         while (!session.players.isEmpty() && session.players.get(session.currentTurnIndex).bot && safetyCounter++ < 100) {
             LobbyGamePlayer bot = session.players.get(session.currentTurnIndex);
+            boolean pendingBotDuoAfterPlay = shouldBotDeclareDuoAfterPlay(session, bot);
             Opponent.Decision decision = opponent.chooseAction(session.topPlayPileCardId, bot.handCardIds);
             if (decision.action == Opponent.Action.PLAY) {
                 if (decision.handIndex < 0 || decision.handIndex >= bot.handCardIds.size()) {
                     break;
                 }
                 bot.handCardIds.remove(decision.handIndex);
+                refreshPlayersWithTwoCards(session);
                 session.topPlayPileCardId = decision.playPileCardId;
                 if (bot.handCardIds.isEmpty()) {
                     broadcastLobbyGameState(session);
@@ -288,6 +315,12 @@ public class GameManager {
                 session.pendingDrawCount = extractDrawPenalty(decision.playPileCardId);
                 advanceToNextTurn(session, extractTurnAdvanceCount(decision.playPileCardId));
                 broadcastLobbyGameState(session);
+                if (pendingBotDuoAfterPlay && bot.handCardIds.size() == 2) {
+                    sleepBotDuoDelay();
+                    processDuoCall(session, bot, true);
+                } else {
+                    maybeHandleBotDuoCallout(session);
+                }
                 resolveCurrentTurn(session);
                 return;
             }
@@ -309,6 +342,7 @@ public class GameManager {
     }
 
     private void broadcastLobbyGameState(LobbyGameSession session) {
+        refreshPlayersWithTwoCards(session);
         String currentTurnUsername = session.players.get(session.currentTurnIndex).username;
         for (int i = 0; i < session.players.size(); i++) {
             LobbyGamePlayer recipient = session.players.get(i);
@@ -322,12 +356,21 @@ public class GameManager {
             update.currentTurnUsername = currentTurnUsername;
             update.currentPlayerCanDraw = session.currentPlayerCanDraw;
             update.turnActionsLocked = session.turnActionsLocked;
+            update.showDuoButton = shouldShowDuoButton(session, recipient, currentTurnUsername);
             update.playerHandCardIds.addAll(recipient.handCardIds);
             for (LobbyGamePlayer player : session.players) {
                 update.playerUsernames.add(player.username);
                 update.playerHandCounts.add(player.handCardIds.size());
             }
             recipient.account.sendPacket(update);
+        }
+    }
+
+    private void broadcastDuoEvent(LobbyGameSession session, Network.GameDuoEvent duoEvent) {
+        for (LobbyGamePlayer player : session.players) {
+            if (player.account != null) {
+                player.account.sendPacket(duoEvent);
+            }
         }
     }
 
@@ -359,6 +402,150 @@ public class GameManager {
             player.handCardIds.add(drawnCardId);
         }
         return drawnCardId;
+    }
+
+    private void refreshPlayersWithTwoCards(LobbyGameSession session) {
+        session.playersWithTwoCards.clear();
+        for (LobbyGamePlayer player : session.players) {
+            if (player.handCardIds.size() == 2) {
+                session.playersWithTwoCards.add(player.username);
+            }
+        }
+        session.playersWhoCalledDuo.retainAll(session.playersWithTwoCards);
+    }
+
+    private LobbyGamePlayer findPlayerByAccount(LobbyGameSession session, Account account) {
+        for (LobbyGamePlayer player : session.players) {
+            if (player.account == account) {
+                return player;
+            }
+        }
+        return null;
+    }
+
+    private void processDuoCall(LobbyGameSession session, LobbyGamePlayer caller, boolean bypassVisibilityCheck) {
+        if (session == null || caller == null || session.players.isEmpty()) {
+            return;
+        }
+
+        String currentTurnUsername = session.players.get(session.currentTurnIndex).username;
+        if (!bypassVisibilityCheck
+            && !shouldShowDuoButton(session, caller, currentTurnUsername)
+            && !canSelfDeclareDuo(session, caller)) {
+            return;
+        }
+
+        Network.GameDuoEvent duoEvent = new Network.GameDuoEvent();
+        duoEvent.username = caller.username;
+        broadcastDuoEvent(session, duoEvent);
+
+        refreshPlayersWithTwoCards(session);
+        if (session.playersWithTwoCards.contains(caller.username)) {
+            session.playersWhoCalledDuo.add(caller.username);
+        } else {
+            applyDuoPenalty(session);
+        }
+        broadcastLobbyGameState(session);
+    }
+
+    private boolean canSelfDeclareDuo(LobbyGameSession session, LobbyGamePlayer caller) {
+        refreshPlayersWithTwoCards(session);
+        return session.playersWithTwoCards.contains(caller.username)
+            && !session.playersWhoCalledDuo.contains(caller.username);
+    }
+
+    private void applyDuoPenalty(LobbyGameSession session) {
+        List<LobbyGamePlayer> penalizedPlayers = new ArrayList<>();
+        for (LobbyGamePlayer player : session.players) {
+            if (session.playersWithTwoCards.contains(player.username) && !session.playersWhoCalledDuo.contains(player.username)) {
+                penalizedPlayers.add(player);
+            }
+        }
+
+        for (LobbyGamePlayer penalizedPlayer : penalizedPlayers) {
+            for (int drawCount = 0; drawCount < 3; drawCount++) {
+                drawCardToPlayer(session, penalizedPlayer);
+                broadcastLobbyGameState(session);
+                if (drawCount < 2) {
+                    sleepDrawDelay();
+                }
+            }
+        }
+    }
+
+    private void maybeHandleBotDuoCallout(LobbyGameSession session) {
+        LobbyGamePlayer botCaller = findBotDuoCalloutCandidate(session);
+        if (botCaller == null) {
+            return;
+        }
+
+        sleepBotDuoDelay();
+        processDuoCall(session, botCaller, false);
+    }
+
+    private LobbyGamePlayer findBotDuoCalloutCandidate(LobbyGameSession session) {
+        refreshPlayersWithTwoCards(session);
+        if (!hasUndeclaredTwoCardPlayer(session)) {
+            return null;
+        }
+
+        String currentTurnUsername = session.players.get(session.currentTurnIndex).username;
+        for (LobbyGamePlayer player : session.players) {
+            if (!player.bot) {
+                continue;
+            }
+            if (session.playersWithTwoCards.contains(player.username)) {
+                continue;
+            }
+            if (shouldShowDuoButton(session, player, currentTurnUsername)) {
+                return player;
+            }
+        }
+        return null;
+    }
+
+    private boolean hasUndeclaredTwoCardPlayer(LobbyGameSession session) {
+        for (String username : session.playersWithTwoCards) {
+            if (!session.playersWhoCalledDuo.contains(username)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean shouldBotDeclareDuoAfterPlay(LobbyGameSession session, LobbyGamePlayer bot) {
+        return bot != null
+            && bot.handCardIds.size() == 3
+            && playerHasPlayableCard(session.topPlayPileCardId, bot.handCardIds);
+    }
+
+    private boolean shouldShowDuoButton(LobbyGameSession session, LobbyGamePlayer recipient, String currentTurnUsername) {
+        if (recipient == null) {
+            return false;
+        }
+
+        if (anyOtherPlayerHasUndeclaredDuo(session, recipient.username)) {
+            return true;
+        }
+
+        if (!recipient.username.equals(currentTurnUsername)) {
+            return false;
+        }
+
+        int handSize = recipient.handCardIds.size();
+        if (session.playersWhoCalledDuo.contains(recipient.username)) {
+            return false;
+        }
+        return handSize == 2 || (handSize == 3 && playerHasPlayableCard(session.topPlayPileCardId, recipient.handCardIds));
+    }
+
+    private boolean anyOtherPlayerHasUndeclaredDuo(LobbyGameSession session, String usernameToExclude) {
+        for (String username : session.playersWithTwoCards) {
+            if (!username.equals(usernameToExclude) && !session.playersWhoCalledDuo.contains(username)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String drawCardFromPile(LobbyGameSession session) {
@@ -560,6 +747,10 @@ public class GameManager {
         }
     }
 
+    private void sleepBotDuoDelay() {
+        sleep(BOT_DUO_DELAY_MS);
+    }
+
     private void finishLobbyGame(LobbyGameSession session, String winnerUsername) {
         sleep(GAME_END_DELAY_MS);
 
@@ -591,11 +782,15 @@ public class GameManager {
         }
         session.players.clear();
         session.drawPile.clear();
+        session.playersWithTwoCards.clear();
+        session.playersWhoCalledDuo.clear();
     }
 
     private static final class LobbyGameSession {
         private final List<LobbyGamePlayer> players = new ArrayList<>();
         private final List<String> drawPile = new ArrayList<>();
+        private final Set<String> playersWithTwoCards = new HashSet<>();
+        private final Set<String> playersWhoCalledDuo = new HashSet<>();
         private String topPlayPileCardId;
         private int currentTurnIndex;
         private int turnDirection = 1;

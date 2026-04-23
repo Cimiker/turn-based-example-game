@@ -33,6 +33,8 @@ public class Network {
         kryo.register(LobbyOperationResult.class);
         kryo.register(GameTurnActionRequest.class);
         kryo.register(GameTurnActionRequest.ActionType.class);
+        kryo.register(GameDuoRequest.class);
+        kryo.register(GameDuoEvent.class);
 
     }
 
@@ -62,6 +64,7 @@ public class Network {
         public String currentTurnUsername;
         public boolean currentPlayerCanDraw = true;
         public boolean turnActionsLocked;
+        public boolean showDuoButton;
         public ArrayList<String> playerUsernames = new ArrayList<>();
         public ArrayList<Integer> playerHandCounts = new ArrayList<>();
         public ArrayList<String> playerHandCardIds = new ArrayList<>();
@@ -78,6 +81,14 @@ public class Network {
             PLAY_CARD,
             DRAW_CARD
         }
+    }
+
+    public static class GameDuoRequest {
+
+    }
+
+    public static class GameDuoEvent {
+        public String username;
     }
 
     public static class JoinGameRequest {

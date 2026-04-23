@@ -70,7 +70,7 @@ public class Opponent {
         for (int i = 0; i < handCardIds.size(); i++) {
             String cardId = handCardIds.get(i);
             if (topSymbol.equals(extractCardSymbol(cardId))) {
-                return Decision.play(i, cardId, cardId);
+                return Decision.play(i, cardId, resolvePlayedCardId(cardId));
             }
         }
         return null;
@@ -80,7 +80,7 @@ public class Opponent {
         for (int i = 0; i < handCardIds.size(); i++) {
             String cardId = handCardIds.get(i);
             if (topColor.equals(extractCardColor(cardId))) {
-                return Decision.play(i, cardId, cardId);
+                return Decision.play(i, cardId, resolvePlayedCardId(cardId));
             }
         }
         return null;
@@ -98,6 +98,13 @@ public class Opponent {
 
     private String withRandomColor(String wildCardId) {
         return CARD_COLORS[random.nextInt(CARD_COLORS.length)] + "_" + wildCardId;
+    }
+
+    private String resolvePlayedCardId(String cardId) {
+        if (CHANGE_COLOR.equals(cardId) || CHANGE_COLOR_PLUS_4.equals(cardId)) {
+            return withRandomColor(cardId);
+        }
+        return cardId;
     }
 
     private void pauseBeforeAction() {
