@@ -24,6 +24,7 @@ public class JoinPrivateLobbyScreen extends Stage {
     private final Runnable lobbyStateListener;
     private final Consumer<io.github.turn_based_example_game.Network.LobbyOperationResult> lobbyOperationListener;
 
+    /** Builds the screen for joining a private lobby by code. */
     public JoinPrivateLobbyScreen(Main game) {
         super(new ScreenViewport());
         Gdx.input.setInputProcessor(this);
@@ -94,6 +95,7 @@ public class JoinPrivateLobbyScreen extends Stage {
         NetworkManager.setLobbyOperationListener(lobbyOperationListener);
 
         joinLobbyButton.addListener(new ClickListener() {
+            /** Validates the entered lobby code and sends a join request. */
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 statusLabel.setText("");
@@ -102,7 +104,7 @@ public class JoinPrivateLobbyScreen extends Stage {
                     statusLabel.setText("Server is not available");
                     return;
                 }
-                String lobbyCode = lobbyCodeField.getText().trim().toUpperCase();
+                String lobbyCode = lobbyCodeField.getText(); // This seems too loose
                 if (lobbyCode.length() != 5) {
                     statusLabel.setText("A lobby couldn't be found");
                     return;
@@ -112,6 +114,7 @@ public class JoinPrivateLobbyScreen extends Stage {
         });
 
         backButton.addListener(new ClickListener() {
+            /** Returns to the lobby join menu. */
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 Gdx.app.postRunnable(() -> game.switchScreen(new JoinGameLobbyScreen(game)));
@@ -119,6 +122,7 @@ public class JoinPrivateLobbyScreen extends Stage {
         });
     }
 
+    /** Clears lobby listeners when this screen is closed. */
     @Override
     public void dispose() {
         NetworkManager.clearLobbyStateListener(lobbyStateListener);

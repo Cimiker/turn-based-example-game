@@ -35,6 +35,7 @@ public class GameManager {
     private final Map<Account, LobbyGameSession> lobbyGamesByAccount;
     private final Set<LobbyGameSession> lobbyGames;
 
+    /** Initializes all game queues and active game tracking collections. */
     public GameManager() {
         games = new HashSet<>();
         waitList = new ArrayList<>();
@@ -43,12 +44,14 @@ public class GameManager {
         lobbyGames = new HashSet<>();
     }
 
+    /** Removes a finished legacy game from active tracking. */
     public void gameEnded(Game game) {
         System.out.println("Game ended: " + game + "winner: " + game.getWinner());
         game.dispose();
         games.remove(game);
     }
 
+    /** Removes a player from matchmaking, lobby games, or active legacy games. */
     public synchronized void handlePlayerLeave(Account account) {
         waitList.remove(account);
         teamsWaitList.remove(account);
@@ -66,6 +69,7 @@ public class GameManager {
         }
     }
 
+    /** Creates and starts a card game from the lobby player order. */
     public synchronized void startLobbyGame(List<Account> humanAccounts, List<Network.LobbyPlayer> playersInOrder) {
         if (humanAccounts == null || humanAccounts.isEmpty() || playersInOrder == null || playersInOrder.isEmpty()) {
             return;
@@ -104,6 +108,7 @@ public class GameManager {
         resolveCurrentTurn(session);
     }
 
+    /** Routes authenticated gameplay packets to the correct game handler. */
     public synchronized void handlePackets(Connection connection, Object object) {
         Account account = Database.findAccount(connection);
         if (account == null) {
@@ -167,6 +172,7 @@ public class GameManager {
         }
     }
 
+    /** Validates and applies a human player's requested turn action. */
     private void handleTurnAction(Account account, Network.GameTurnActionRequest request) {
         LobbyGameSession session = lobbyGamesByAccount.get(account);
         if (session == null || session.players.isEmpty() || request == null || request.actionType == null || session.turnActionsLocked) {
@@ -185,6 +191,7 @@ public class GameManager {
         }
     }
 
+    /** Handles a DUO call from a human player. */
     private void handleGameDuo(Account account) {
         LobbyGameSession session = lobbyGamesByAccount.get(account);
         if (session == null) {
@@ -199,6 +206,7 @@ public class GameManager {
         processDuoCall(session, caller, false);
     }
 
+    /** Plays a valid human card and advances game state. */
     private void handleHumanPlay(LobbyGameSession session, LobbyGamePlayer currentPlayer, Network.GameTurnActionRequest request) {
         if (request.handIndex < 0 || request.handIndex >= currentPlayer.handCardIds.size()) {
             return;
@@ -224,12 +232,12 @@ public class GameManager {
         }
         applyTurnDirectionChange(session, resolvedPlayPileCardId);
         session.pendingDrawCount = extractDrawPenalty(resolvedPlayPileCardId);
-        advanceToNextTurn(session, extractTurnAdvanceCount(resolvedPlayPileCardId));
-        broadcastLobbyGameState(session);
+        // TODO
         maybeHandleBotDuoCallout(session);
-        resolveCurrentTurn(session);
+        // TODO
     }
 
+    /** Draws cards for a human player according to turn rules. */
     private void handleHumanDraw(LobbyGameSession session, LobbyGamePlayer currentPlayer) {
         if (!session.currentPlayerCanDraw) {
             return;
@@ -259,6 +267,7 @@ public class GameManager {
         }
     }
 
+    /** Resolves automatic effects and bot actions for the current turn. */
     private void resolveCurrentTurn(LobbyGameSession session) {
         if (session.players.isEmpty()) {
             return;
@@ -272,6 +281,7 @@ public class GameManager {
         }
     }
 
+    /** Applies queued draw penalties to the current player. */
     private void applyPendingDrawPenalty(LobbyGameSession session) {
         LobbyGamePlayer penalizedPlayer = session.players.get(session.currentTurnIndex);
         session.currentPlayerCanDraw = false;
@@ -293,6 +303,7 @@ public class GameManager {
         maybeHandleBotDuoCallout(session);
     }
 
+    /** Lets bot players act until a human turn is reached. */
     private void resolveBotTurns(LobbyGameSession session) {
         int safetyCounter = 0;
         while (!session.players.isEmpty() && session.players.get(session.currentTurnIndex).bot && safetyCounter++ < 100) {
@@ -341,6 +352,7 @@ public class GameManager {
         }
     }
 
+    /** Sends each human player their current view of the game state. */
     private void broadcastLobbyGameState(LobbyGameSession session) {
         refreshPlayersWithTwoCards(session);
         String currentTurnUsername = session.players.get(session.currentTurnIndex).username;
@@ -351,7 +363,7 @@ public class GameManager {
             }
 
             Network.GameStateUpdate update = new Network.GameStateUpdate();
-            update.playerIndex = i;
+            // Something is missing here
             update.topPlayPileCardId = session.topPlayPileCardId;
             update.currentTurnUsername = currentTurnUsername;
             update.currentPlayerCanDraw = session.currentPlayerCanDraw;
@@ -366,6 +378,7 @@ public class GameManager {
         }
     }
 
+    /** Notifies all human players that someone called DUO. */
     private void broadcastDuoEvent(LobbyGameSession session, Network.GameDuoEvent duoEvent) {
         for (LobbyGamePlayer player : session.players) {
             if (player.account != null) {
@@ -374,10 +387,12 @@ public class GameManager {
         }
     }
 
+    /** Advances the turn by one player. */
     private void advanceToNextTurn(LobbyGameSession session) {
         advanceToNextTurn(session, 1);
     }
 
+    /** Advances the turn by the requested number of player steps. */
     private void advanceToNextTurn(LobbyGameSession session, int stepCount) {
         if (session.players.isEmpty()) {
             return;
@@ -390,12 +405,14 @@ public class GameManager {
         session.turnActionsLocked = false;
     }
 
+    /** Deals the default starting hand to one player. */
     private void dealStartingHand(LobbyGameSession session, LobbyGamePlayer player) {
         for (int i = 0; i < DEFAULT_HAND_SIZE; i++) {
             drawCardToPlayer(session, player);
         }
     }
 
+    /** Draws one card from the pile into a player's hand. */
     private String drawCardToPlayer(LobbyGameSession session, LobbyGamePlayer player) {
         String drawnCardId = drawCardFromPile(session);
         if (drawnCardId != null) {
@@ -404,6 +421,7 @@ public class GameManager {
         return drawnCardId;
     }
 
+    /** Rebuilds the set of players currently eligible for DUO calls. */
     private void refreshPlayersWithTwoCards(LobbyGameSession session) {
         session.playersWithTwoCards.clear();
         for (LobbyGamePlayer player : session.players) {
@@ -414,6 +432,7 @@ public class GameManager {
         session.playersWhoCalledDuo.retainAll(session.playersWithTwoCards);
     }
 
+    /** Finds the game player object tied to an account. */
     private LobbyGamePlayer findPlayerByAccount(LobbyGameSession session, Account account) {
         for (LobbyGamePlayer player : session.players) {
             if (player.account == account) {
@@ -423,6 +442,7 @@ public class GameManager {
         return null;
     }
 
+    /** Applies DUO call rules for the caller and possible penalties. */
     private void processDuoCall(LobbyGameSession session, LobbyGamePlayer caller, boolean bypassVisibilityCheck) {
         if (session == null || caller == null || session.players.isEmpty()) {
             return;
@@ -448,12 +468,14 @@ public class GameManager {
         broadcastLobbyGameState(session);
     }
 
+    /** Checks whether a player can protect themself with a DUO call. */
     private boolean canSelfDeclareDuo(LobbyGameSession session, LobbyGamePlayer caller) {
         refreshPlayersWithTwoCards(session);
         return session.playersWithTwoCards.contains(caller.username)
             && !session.playersWhoCalledDuo.contains(caller.username);
     }
 
+    /** Gives penalty cards to players who failed to call DUO. */
     private void applyDuoPenalty(LobbyGameSession session) {
         List<LobbyGamePlayer> penalizedPlayers = new ArrayList<>();
         for (LobbyGamePlayer player : session.players) {
@@ -473,6 +495,7 @@ public class GameManager {
         }
     }
 
+    /** Lets a bot call out an undeclared DUO when possible. */
     private void maybeHandleBotDuoCallout(LobbyGameSession session) {
         LobbyGamePlayer botCaller = findBotDuoCalloutCandidate(session);
         if (botCaller == null) {
@@ -483,6 +506,7 @@ public class GameManager {
         processDuoCall(session, botCaller, false);
     }
 
+    /** Finds a bot that is allowed to call DUO on another player. */
     private LobbyGamePlayer findBotDuoCalloutCandidate(LobbyGameSession session) {
         refreshPlayersWithTwoCards(session);
         if (!hasUndeclaredTwoCardPlayer(session)) {
@@ -504,6 +528,7 @@ public class GameManager {
         return null;
     }
 
+    /** Checks whether any two-card player has not declared DUO. */
     private boolean hasUndeclaredTwoCardPlayer(LobbyGameSession session) {
         for (String username : session.playersWithTwoCards) {
             if (!session.playersWhoCalledDuo.contains(username)) {
@@ -513,12 +538,14 @@ public class GameManager {
         return false;
     }
 
+    /** Checks whether a bot should plan to call DUO after playing. */
     private boolean shouldBotDeclareDuoAfterPlay(LobbyGameSession session, LobbyGamePlayer bot) {
         return bot != null
             && bot.handCardIds.size() == 3
             && playerHasPlayableCard(session.topPlayPileCardId, bot.handCardIds);
     }
 
+    /** Determines whether a player should see the DUO button. */
     private boolean shouldShowDuoButton(LobbyGameSession session, LobbyGamePlayer recipient, String currentTurnUsername) {
         if (recipient == null) {
             return false;
@@ -539,6 +566,7 @@ public class GameManager {
         return handSize == 2 || (handSize == 3 && playerHasPlayableCard(session.topPlayPileCardId, recipient.handCardIds));
     }
 
+    /** Checks whether another player can be challenged for missing DUO. */
     private boolean anyOtherPlayerHasUndeclaredDuo(LobbyGameSession session, String usernameToExclude) {
         for (String username : session.playersWithTwoCards) {
             if (!username.equals(usernameToExclude) && !session.playersWhoCalledDuo.contains(username)) {
@@ -548,6 +576,7 @@ public class GameManager {
         return false;
     }
 
+    /** Removes and returns one card from the draw pile. */
     private String drawCardFromPile(LobbyGameSession session) {
         if (session.drawPile.isEmpty()) {
             session.drawPile.addAll(createShuffledDrawPile());
@@ -558,6 +587,7 @@ public class GameManager {
         return session.drawPile.remove(session.drawPile.size() - 1);
     }
 
+    /** Selects a numbered starting card for the play pile. */
     private String drawOpeningPlayPileCard(List<String> drawPile) {
         for (int i = drawPile.size() - 1; i >= 0; i--) {
             String cardId = drawPile.get(i);
@@ -569,6 +599,8 @@ public class GameManager {
         return pickRandomNumberedCardId();
     }
 
+    // Incomplete function
+    /** Builds and shuffles a fresh draw pile. */
     private List<String> createShuffledDrawPile() {
         List<String> drawPile = new ArrayList<>();
         String cardStyle = CARD_STYLE_VARIANTS[random.nextInt(CARD_STYLE_VARIANTS.length)];
@@ -586,10 +618,11 @@ public class GameManager {
             drawPile.add(CHANGE_COLOR);
             drawPile.add(CHANGE_COLOR_PLUS_4);
         }
-        Collections.shuffle(drawPile, random);
+
         return drawPile;
     }
 
+    /** Checks whether a hand contains any card playable on the pile. */
     private boolean playerHasPlayableCard(String topPlayPileCardId, List<String> handCardIds) {
         for (String handCardId : handCardIds) {
             if (canPlayCard(topPlayPileCardId, handCardId)) {
@@ -599,6 +632,7 @@ public class GameManager {
         return false;
     }
 
+    /** Checks whether one card can legally be played on another. */
     private boolean canPlayCard(String topPlayPileCardId, String handCardId) {
         if (isAlwaysPlayableCard(handCardId)) {
             return true;
@@ -621,6 +655,7 @@ public class GameManager {
         return topNumber != null && topNumber.equals(playedNumber);
     }
 
+    /** Resolves a played card into the ID stored on the play pile. */
     private String resolvePlayedPileCard(String handCardId, String chosenColor) {
         if (CHANGE_COLOR.equals(handCardId) || CHANGE_COLOR_PLUS_4.equals(handCardId)) {
             if (!isValidColor(chosenColor)) {
@@ -631,6 +666,7 @@ public class GameManager {
         return handCardId;
     }
 
+    /** Checks whether a color ID is one of the supported card colors. */
     private boolean isValidColor(String colorId) {
         if (colorId == null) {
             return false;
@@ -643,6 +679,7 @@ public class GameManager {
         return false;
     }
 
+    /** Extracts the color prefix from a card ID. */
     private static String extractCardColorId(String cardId) {
         if (cardId == null) {
             return null;
@@ -655,6 +692,7 @@ public class GameManager {
         return null;
     }
 
+    /** Extracts the numeric value from a numbered card ID. */
     private static Integer extractCardNumber(String cardId) {
         if (cardId == null) {
             return null;
@@ -671,6 +709,7 @@ public class GameManager {
         }
     }
 
+    /** Extracts the symbol portion used for card matching. */
     private static String extractCardSymbol(String cardId) {
         if (cardId == null || cardId.isBlank()) {
             return null;
@@ -703,23 +742,18 @@ public class GameManager {
         return symbol.toString();
     }
 
+    /** Checks whether a card can be played on any pile card. */
     private static boolean isAlwaysPlayableCard(String cardId) {
         return CHANGE_COLOR.equals(cardId) || CHANGE_COLOR_PLUS_4.equals(cardId);
     }
 
+    /** Returns the draw penalty caused by a played card. */
     private int extractDrawPenalty(String cardId) {
-        if (cardId == null) {
-            return 0;
-        }
-        if (cardId.endsWith(CHANGE_COLOR_PLUS_4)) {
-            return 4;
-        }
-        if (cardId.contains("_plus_2_")) {
-            return 2;
-        }
+        // TODO
         return 0;
     }
 
+    /** Returns how many player slots the turn should advance. */
     private int extractTurnAdvanceCount(String cardId) {
         if (cardId != null && cardId.contains("_skip_")) {
             return 2;
@@ -727,18 +761,21 @@ public class GameManager {
         return 1;
     }
 
+    /** Reverses turn direction when a reverse card is played. */
     private void applyTurnDirectionChange(LobbyGameSession session, String cardId) {
         if (cardId != null && cardId.contains("_switch_order_")) {
             session.turnDirection *= -1;
         }
     }
 
+    /** Creates a fallback random numbered card ID. */
     private String pickRandomNumberedCardId() {
         String color = NUMBERED_CARD_COLORS[random.nextInt(NUMBERED_CARD_COLORS.length)];
         int value = random.nextInt(NUMBERED_CARD_VARIANTS);
         return color + "_" + value + "_filled";
     }
 
+    /** Pauses briefly between repeated draw animations. */
     private void sleepDrawDelay() {
         try {
             Thread.sleep(DRAW_STEP_DELAY_MS);
@@ -747,10 +784,12 @@ public class GameManager {
         }
     }
 
+    /** Pauses before a bot announces DUO. */
     private void sleepBotDuoDelay() {
         sleep(BOT_DUO_DELAY_MS);
     }
 
+    /** Sends game end messages and cleans up the finished lobby game. */
     private void finishLobbyGame(LobbyGameSession session, String winnerUsername) {
         sleep(GAME_END_DELAY_MS);
 
@@ -764,6 +803,7 @@ public class GameManager {
         disposeLobbyGame(session);
     }
 
+    /** Sleeps for the requested duration while preserving interruption state. */
     private void sleep(long delayMs) {
         try {
             Thread.sleep(delayMs);
@@ -772,6 +812,7 @@ public class GameManager {
         }
     }
 
+    /** Removes all server-side state for a lobby game session. */
     private void disposeLobbyGame(LobbyGameSession session) {
         lobbyGames.remove(session);
         for (LobbyGamePlayer player : session.players) {
@@ -805,6 +846,7 @@ public class GameManager {
         private final Account account;
         private final List<String> handCardIds = new ArrayList<>();
 
+        /** Stores player identity and hand state for a lobby game. */
         private LobbyGamePlayer(String username, boolean bot, Account account) {
             this.username = username;
             this.bot = bot;

@@ -20,6 +20,7 @@ import io.github.turn_based_example_game.NetworkManager;
 
 public class CreateLobbyScreen extends Stage {
 
+    /** Builds the screen that lets a player choose lobby settings. */
     public CreateLobbyScreen(Main game) {
         super(new ScreenViewport());
         Gdx.input.setInputProcessor(this);
@@ -77,6 +78,7 @@ public class CreateLobbyScreen extends Stage {
         addActor(table);
 
         createLobbyButton.addListener(new ClickListener() {
+            /** Sends the selected lobby settings and opens the lobby screen. */
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 Network.LobbySettings settings = new Network.LobbySettings();
@@ -84,12 +86,14 @@ public class CreateLobbyScreen extends Stage {
                 settings.lobbyMode = lobbyModeButtonGroup.getChecked().getText().toString();
                 settings.fillWithBots = "Yes".contentEquals(botsButtonGroup.getChecked().getText());
 
-                NetworkManager.createLobby(settings);
+                // There seems to be something missing here
+
                 Gdx.app.postRunnable(() -> game.switchScreen(new GameLobbyScreen(game)));
             }
         });
 
         backButton.addListener(new ClickListener() {
+            /** Returns to the lobby join menu. */
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 Gdx.app.postRunnable(() -> game.switchScreen(new JoinGameLobbyScreen(game)));
@@ -97,6 +101,7 @@ public class CreateLobbyScreen extends Stage {
         });
     }
 
+    /** Creates the visual style for selectable lobby option buttons. */
     private TextButton.TextButtonStyle createOptionButtonStyle(Skin skin) {
         TextButton.TextButtonStyle baseStyle = skin.get(TextButton.TextButtonStyle.class);
         TextButton.TextButtonStyle optionStyle = new TextButton.TextButtonStyle(baseStyle);

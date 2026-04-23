@@ -87,18 +87,22 @@ public class GameScreen extends Stage {
     private String currentTurnUsername;
     private int pendingWildHandIndex = -1;
 
+    /** Creates a standalone game screen with fallback state. */
     public GameScreen() {
         this(null, null, null);
     }
 
+    /** Creates a game screen attached to the main game instance. */
     public GameScreen(Main game) {
         this(game, null, null);
     }
 
+    /** Creates a game screen from a lobby snapshot. */
     public GameScreen(Main game, Network.LobbyState lobbyState) {
         this(game, lobbyState, null);
     }
 
+    /** Creates a synchronized game screen from lobby and game state. */
     public GameScreen(Main game, Network.LobbyState lobbyState, Network.GameStateUpdate initialGameState) {
         super(new ScreenViewport());
         this.game = game;
@@ -124,6 +128,7 @@ public class GameScreen extends Stage {
         Gdx.input.setInputProcessor(this);
     }
 
+    /** Builds the full game board UI and overlay actors. */
     private void buildBoard() {
         Texture backgroundTexture = Gdx.files.internal("menuBackground.png").exists()
             ? trackTexture(new Texture(Gdx.files.internal("menuBackground.png")))
@@ -153,6 +158,7 @@ public class GameScreen extends Stage {
         duoOverlayImage.toFront();
     }
 
+    /** Creates the top board row with opponent and draw pile. */
     private Table createTopRow() {
         float drawZoneWidth = (CARD_WIDTH * DRAW_PILE_SCALE) + 64f;
         Table row = new Table();
@@ -162,6 +168,7 @@ public class GameScreen extends Stage {
         return row;
     }
 
+    /** Creates the middle board row with side opponents and play pile. */
     private Table createMiddleRow() {
         Table row = new Table();
         row.defaults().pad(12f);
@@ -171,12 +178,14 @@ public class GameScreen extends Stage {
         return row;
     }
 
+    /** Creates the bottom board row for the local player's hand. */
     private Table createBottomRow() {
         Table row = new Table();
         row.add(createPlayerArea(getPlayerAtSeat(0))).center().bottom();
         return row;
     }
 
+    /** Creates the top opponent area for a player. */
     private Table createOpponentArea(Network.LobbyPlayer player) {
         Table section = new Table();
         section.defaults().pad(4f);
@@ -194,6 +203,7 @@ public class GameScreen extends Stage {
         return section;
     }
 
+    /** Creates a side opponent area for a player. */
     private Table createSideOpponentArea(Network.LobbyPlayer player) {
         Table section = new Table();
         section.defaults().pad(4f);
@@ -211,6 +221,7 @@ public class GameScreen extends Stage {
         return section;
     }
 
+    /** Creates the center area containing the play pile. */
     private Table createCenterArea() {
         Table section = new Table();
         section.defaults().pad(10f);
@@ -221,6 +232,7 @@ public class GameScreen extends Stage {
         return section;
     }
 
+    /** Creates the hidden color picker used by wild cards. */
     private Table createWildColorPicker() {
         Table picker = new Table(skin);
         picker.defaults().width(88f).height(40f).pad(4f);
@@ -236,9 +248,11 @@ public class GameScreen extends Stage {
         return picker;
     }
 
+    /** Creates one color choice button for the wild card picker. */
     private TextButton createWildColorButton(String text, String colorId) {
         TextButton button = new TextButton(text, skin);
         button.addListener(new ClickListener() {
+            /** Selects this button's wild card color. */
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 chooseWildColor(colorId);
@@ -247,6 +261,7 @@ public class GameScreen extends Stage {
         return button;
     }
 
+    /** Creates the DUO call button. */
     private TextButton createDuoButton() {
         TextButton button = new TextButton("DUO", skin);
         button.getLabel().setFontScale(1.35f);
@@ -255,6 +270,7 @@ public class GameScreen extends Stage {
         button.setVisible(false);
         button.setTouchable(Touchable.disabled);
         button.addListener(new ClickListener() {
+            /** Sends or queues a DUO announcement. */
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 announceDuo();
@@ -263,6 +279,7 @@ public class GameScreen extends Stage {
         return button;
     }
 
+    /** Creates the temporary DUO announcement overlay. */
     private Image createDuoOverlayImage() {
         Texture texture = trackTexture(new Texture(Gdx.files.internal(CARD_ASSET_ROOT + "duo.png")));
         Image image = new Image(texture);
@@ -272,12 +289,14 @@ public class GameScreen extends Stage {
         return image;
     }
 
+    /** Creates the draw pile section. */
     private Table createDrawPileArea() {
         float drawWidth = CARD_WIDTH * DRAW_PILE_SCALE;
         float drawHeight = CARD_HEIGHT * DRAW_PILE_SCALE;
         return createPile("Draw Pile", new DrawPileCardActor(drawWidth, drawHeight), drawWidth, drawHeight);
     }
 
+    /** Creates a labelled card pile UI block. */
     private Table createPile(String labelText, Actor cardActor, float cardWidth, float cardHeight) {
         Table pile = new Table();
         pile.defaults().pad(4f);
@@ -294,6 +313,7 @@ public class GameScreen extends Stage {
         return pile;
     }
 
+    /** Creates the local player's hand area. */
     private Table createPlayerArea(Network.LobbyPlayer player) {
         Table section = new Table();
         section.defaults().pad(4f);
@@ -311,6 +331,7 @@ public class GameScreen extends Stage {
         return section;
     }
 
+    /** Creates a hidden hand display with card backs. */
     private Table createHiddenHand(int cardCount) {
         Table cards = new Table();
         cards.defaults().padLeft(-30f);
@@ -318,6 +339,7 @@ public class GameScreen extends Stage {
         return cards;
     }
 
+    /** Rebuilds a hidden hand table with the requested card count. */
     private void populateHiddenHand(Table cards, int cardCount) {
         cards.clearChildren();
         float width = CARD_WIDTH * OPPONENT_CARD_SCALE;
@@ -329,6 +351,7 @@ public class GameScreen extends Stage {
         cards.invalidateHierarchy();
     }
 
+    /** Builds player seating order with the local player at the bottom. */
     private List<Network.LobbyPlayer> buildPlayOrder(Network.LobbyState lobbyState) {
         List<Network.LobbyPlayer> orderedPlayers = new ArrayList<>();
         if (lobbyState != null) {
@@ -366,6 +389,7 @@ public class GameScreen extends Stage {
         return rotatedPlayers;
     }
 
+    /** Returns the player assigned to a visual seat. */
     private Network.LobbyPlayer getPlayerAtSeat(int seatIndex) {
         if (seatIndex < 0 || seatIndex >= playOrder.size()) {
             return null;
@@ -373,6 +397,7 @@ public class GameScreen extends Stage {
         return playOrder.get(seatIndex);
     }
 
+    /** Creates a fallback local player when no lobby state exists. */
     private Network.LobbyPlayer createLocalFallbackPlayer() {
         Network.LobbyPlayer player = new Network.LobbyPlayer();
         player.username = Account.getUsername() == null ? "You" : Account.getUsername();
@@ -380,6 +405,7 @@ public class GameScreen extends Stage {
         return player;
     }
 
+    /** Copies a lobby player for local screen state. */
     private Network.LobbyPlayer copyPlayer(Network.LobbyPlayer source) {
         Network.LobbyPlayer copy = new Network.LobbyPlayer();
         copy.username = source.username;
@@ -389,6 +415,7 @@ public class GameScreen extends Stage {
         return copy;
     }
 
+    /** Builds the label text shown for a player. */
     private String getPlayerLabel(Network.LobbyPlayer player) {
         String currentUsername = Account.getUsername();
         if (!player.bot && currentUsername != null && currentUsername.equals(player.username)) {
@@ -397,6 +424,7 @@ public class GameScreen extends Stage {
         return player.bot ? player.username + " [Bot]" : player.username;
     }
 
+    /** Creates and tracks a player title label. */
     private Label createPlayerTitleLabel(String username, String baseText) {
         Label title = new Label(baseText, skin);
         title.setColor(Color.WHITE);
@@ -407,6 +435,7 @@ public class GameScreen extends Stage {
         return title;
     }
 
+    /** Initializes the local hand from server or fallback data. */
     private void initializePlayerHand(Network.GameStateUpdate initialGameState) {
         playerHandCards.clear();
         if (initialGameState != null && initialGameState.playerHandCardIds != null && !initialGameState.playerHandCardIds.isEmpty()) {
@@ -419,6 +448,7 @@ public class GameScreen extends Stage {
         }
     }
 
+    /** Resolves the starting play pile card for the screen. */
     private String resolveInitialTopPlayPileCardId(Network.GameStateUpdate initialGameState) {
         if (initialGameState != null && initialGameState.topPlayPileCardId != null && !initialGameState.topPlayPileCardId.isBlank()) {
             return initialGameState.topPlayPileCardId;
@@ -426,6 +456,7 @@ public class GameScreen extends Stage {
         return pickRandomNumberedCardId();
     }
 
+    /** Resolves whose turn should be displayed initially. */
     private String resolveInitialTurnUsername(Network.GameStateUpdate initialGameState) {
         if (initialGameState != null && initialGameState.currentTurnUsername != null && !initialGameState.currentTurnUsername.isBlank()) {
             return initialGameState.currentTurnUsername;
@@ -433,6 +464,7 @@ public class GameScreen extends Stage {
         return playOrder.isEmpty() ? Account.getUsername() : playOrder.get(0).username;
     }
 
+    /** Initializes displayed hand counts for all visible players. */
     private void initializeDisplayedHandCounts(Network.GameStateUpdate initialGameState) {
         handCountsByUsername.clear();
         for (Network.LobbyPlayer player : playOrder) {
@@ -447,6 +479,7 @@ public class GameScreen extends Stage {
         }
     }
 
+    /** Updates visible hand counts from a server state update. */
     private void updateDisplayedHandCounts(Network.GameStateUpdate update) {
         if (update.playerUsernames == null || update.playerHandCounts == null || update.playerUsernames.size() != update.playerHandCounts.size()) {
             return;
@@ -458,12 +491,14 @@ public class GameScreen extends Stage {
         }
     }
 
+    /** Creates a fallback random numbered card ID. */
     private String pickRandomNumberedCardId() {
         String color = NUMBERED_CARD_COLORS[ThreadLocalRandom.current().nextInt(NUMBERED_CARD_COLORS.length)];
         int value = ThreadLocalRandom.current().nextInt(NUMBERED_CARD_VARIANTS);
         return color + "_" + value + "_filled";
     }
 
+    /** Applies a server game state update to the local UI. */
     private void applyGameStateUpdate(Network.GameStateUpdate update) {
         if (update == null) {
             return;
@@ -492,6 +527,7 @@ public class GameScreen extends Stage {
         refreshSynchronizedUi();
     }
 
+    /** Switches to the game end screen when the server ends the game. */
     private void handleGameEnd(Network.GameEnd end) {
         if (game == null) {
             return;
@@ -499,6 +535,7 @@ public class GameScreen extends Stage {
         game.switchScreen(new GameEndScreen(game, end));
     }
 
+    /** Refreshes all UI elements that depend on synchronized game state. */
     private void refreshSynchronizedUi() {
         if (playPileCardActor != null) {
             playPileCardActor.setCard(playPile.getTopCardId(), false);
@@ -509,12 +546,14 @@ public class GameScreen extends Stage {
         updateWildColorPickerPosition();
     }
 
+    /** Rebuilds hidden opponent hand displays. */
     private void refreshHiddenHandTables() {
         for (Map.Entry<String, Table> entry : hiddenHandTablesByUsername.entrySet()) {
             populateHiddenHand(entry.getValue(), getDisplayedHandCount(entry.getKey()));
         }
     }
 
+    /** Updates player labels to highlight whose turn it is. */
     private void refreshPlayerLabels() {
         for (Map.Entry<String, Label> entry : playerLabelsByUsername.entrySet()) {
             String username = entry.getKey();
@@ -526,6 +565,7 @@ public class GameScreen extends Stage {
         }
     }
 
+    /** Returns the displayed hand count for a username. */
     private int getDisplayedHandCount(String username) {
         if (username != null && username.equals(Account.getUsername())) {
             return playerHandCards.size();
@@ -534,6 +574,7 @@ public class GameScreen extends Stage {
         return count == null ? DEFAULT_HAND_SIZE : count;
     }
 
+    /** Shows, hides, or disables the DUO button based on state. */
     private void updateDuoButtonState() {
         if (duoButton == null) {
             return;
@@ -553,6 +594,7 @@ public class GameScreen extends Stage {
         }
     }
 
+    /** Starts a DUO announcement if the player is allowed to call it. */
     private void announceDuo() {
         if (pendingDuoAnnouncement || pendingDuoAfterPlay || duoOverlayActive) {
             return;
@@ -567,10 +609,12 @@ public class GameScreen extends Stage {
         sendDuoAnnouncement();
     }
 
+    /** Checks whether DUO should be delayed until after a card play. */
     private boolean shouldDelayDuoAnnouncement() {
         return isLocalPlayersTurn() && playerHandCards.size() == 3 && playerHasPlayableCard();
     }
 
+    /** Sends a DUO request to the server. */
     private void sendDuoAnnouncement() {
         pendingDuoAfterPlay = false;
         pendingDuoAnnouncement = true;
@@ -578,6 +622,7 @@ public class GameScreen extends Stage {
         NetworkManager.sendTCP(new Network.GameDuoRequest());
     }
 
+    /** Displays the temporary DUO overlay animation. */
     private void showDuoOverlay() {
         if (duoOverlayImage == null || duoOverlayActive) {
             return;
@@ -600,6 +645,7 @@ public class GameScreen extends Stage {
         ));
     }
 
+    /** Handles a DUO event received from the server. */
     private void handleGameDuo(Network.GameDuoEvent duoEvent) {
         if (duoEvent == null) {
             pendingDuoAnnouncement = false;
@@ -609,6 +655,7 @@ public class GameScreen extends Stage {
         showDuoOverlay();
     }
 
+    /** Rebuilds the local player's visible hand cards. */
     private void refreshPlayerHand() {
         if (playerHandTable == null) {
             return;
@@ -621,6 +668,7 @@ public class GameScreen extends Stage {
         playerHandTable.invalidateHierarchy();
     }
 
+    /** Checks whether the local hand contains a playable card. */
     private boolean playerHasPlayableCard() {
         for (String cardId : playerHandCards) {
             if (playPile.canAcceptCard(cardId)) {
@@ -630,19 +678,23 @@ public class GameScreen extends Stage {
         return false;
     }
 
+    /** Checks whether it is currently the local player's turn. */
     private boolean isLocalPlayersTurn() {
         String currentUsername = Account.getUsername();
         return currentUsername != null && currentUsername.equals(currentTurnUsername);
     }
 
+    /** Checks whether the local player can currently submit a play. */
     private boolean canLocalPlayerPlay() {
         return isLocalPlayersTurn() && !turnActionsLocked && !pendingTurnSubmission && !pendingWildColorChoice;
     }
 
+    /** Checks whether the local player can currently draw. */
     private boolean canLocalPlayerDraw() {
         return canLocalPlayerPlay() && currentPlayerCanDraw;
     }
 
+    /** Sends a draw-card turn action to the server. */
     private void drawCardsForPlayer() {
         if (!canLocalPlayerDraw()) {
             return;
@@ -654,6 +706,7 @@ public class GameScreen extends Stage {
         NetworkManager.sendTCP(request);
     }
 
+    /** Attempts to play a card from the local hand. */
     private void playCardFromHand(int handIndex) {
         if (!canLocalPlayerPlay()) {
             return;
@@ -675,10 +728,12 @@ public class GameScreen extends Stage {
         submitPlayCard(handIndex, null);
     }
 
+    /** Checks whether a card requires a chosen color before play. */
     private boolean requiresWildColorChoice(String cardId) {
         return "change_color".equals(cardId) || "change_color_plus_4".equals(cardId);
     }
 
+    /** Shows the wild color picker for a pending card play. */
     private void promptForWildColor(int handIndex) {
         pendingWildColorChoice = true;
         pendingWildHandIndex = handIndex;
@@ -690,6 +745,7 @@ public class GameScreen extends Stage {
         }
     }
 
+    /** Completes a pending wild card play with a selected color. */
     private void chooseWildColor(String colorId) {
         if (!pendingWildColorChoice || pendingWildHandIndex < 0 || colorId == null) {
             return;
@@ -701,6 +757,7 @@ public class GameScreen extends Stage {
         pendingWildHandIndex = -1;
     }
 
+    /** Hides and disables the wild color picker. */
     private void hideWildColorPicker() {
         if (wildColorPicker != null) {
             wildColorPicker.setVisible(false);
@@ -708,6 +765,7 @@ public class GameScreen extends Stage {
         }
     }
 
+    /** Positions the wild color picker near the play pile. */
     private void updateWildColorPickerPosition() {
         if (wildColorPicker == null || playPileCardActor == null || !wildColorPicker.isVisible()) {
             return;
@@ -722,6 +780,7 @@ public class GameScreen extends Stage {
         );
     }
 
+    /** Sends a play-card turn action to the server. */
     private void submitPlayCard(int handIndex, String chosenColor) {
         pendingTurnSubmission = true;
         Network.GameTurnActionRequest request = new Network.GameTurnActionRequest();
@@ -734,12 +793,14 @@ public class GameScreen extends Stage {
         }
     }
 
+    /** Creates a visible or hidden card actor with optional hover behavior. */
     private Actor createCardActor(String cardId, boolean hidden, boolean hoverEnabled, float width, float height) {
         return hoverEnabled
             ? new HoverCardActor(cardId, hidden, width, height)
             : new StaticCardActor(cardId, hidden, width, height);
     }
 
+    /** Loads a card texture or creates a placeholder if missing. */
     private Texture loadCardTexture(String cardId, boolean hidden) {
         String resolvedCardId = hidden ? "card_back" : cardId;
         String texturePath = CARD_ASSET_ROOT + resolvedCardId + ".png";
@@ -748,6 +809,7 @@ public class GameScreen extends Stage {
             : createPlaceholderCardTexture(resolvedCardId, hidden);
     }
 
+    /** Creates a simple generated board background texture. */
     private Texture createBoardBackgroundTexture() {
         Pixmap pixmap = new Pixmap(16, 16, Pixmap.Format.RGBA8888);
         pixmap.setColor(Color.valueOf("0d4d3d"));
@@ -760,6 +822,7 @@ public class GameScreen extends Stage {
         return trackTexture(texture);
     }
 
+    /** Creates a subtle background drawable for card piles. */
     private TextureRegionDrawable createPileGlowTexture() {
         Pixmap pixmap = new Pixmap(8, 8, Pixmap.Format.RGBA8888);
         pixmap.setColor(new Color(1f, 1f, 1f, 0.22f));
@@ -769,6 +832,7 @@ public class GameScreen extends Stage {
         return new TextureRegionDrawable(texture);
     }
 
+    /** Creates a generated placeholder texture for a missing card asset. */
     private Texture createPlaceholderCardTexture(String cardId, boolean hidden) {
         Pixmap pixmap = new Pixmap(184, 276, Pixmap.Format.RGBA8888);
 
@@ -801,6 +865,7 @@ public class GameScreen extends Stage {
         return trackTexture(texture);
     }
 
+    /** Draws blocky card text onto a pixmap. */
     private void drawValue(Pixmap pixmap, String value, int startX, int startY, int scale, Color color) {
         pixmap.setColor(color);
         int x = startX;
@@ -809,6 +874,7 @@ public class GameScreen extends Stage {
         }
     }
 
+    /** Draws a filled rounded rectangle onto a pixmap. */
     private void fillRoundedRectangle(Pixmap pixmap, int x, int y, int width, int height, int radius) {
         pixmap.fillRectangle(x + radius, y, width - (radius * 2), height);
         pixmap.fillRectangle(x, y + radius, width, height - (radius * 2));
@@ -818,6 +884,7 @@ public class GameScreen extends Stage {
         pixmap.fillCircle(x + width - radius - 1, y + height - radius - 1, radius);
     }
 
+    /** Draws one blocky glyph and returns its width. */
     private int drawGlyph(Pixmap pixmap, char glyph, int x, int y, int scale) {
         String[] pattern = switch (glyph) {
             case '0' -> new String[]{"111", "101", "101", "101", "111"};
@@ -849,6 +916,7 @@ public class GameScreen extends Stage {
         return pattern[0].length() * scale;
     }
 
+    /** Extracts display text for the center of a card. */
     private String extractCardValue(String cardId) {
         if (cardId.startsWith("wild_draw_four")) {
             return "W+4";
@@ -869,11 +937,13 @@ public class GameScreen extends Stage {
         return splitIndex >= 0 ? cardId.substring(splitIndex + 1).toUpperCase() : cardId.toUpperCase();
     }
 
+    /** Extracts shortened display text for card corners. */
     private String extractCornerValue(String cardId) {
         String value = extractCardValue(cardId);
         return value.length() > 2 ? value.substring(0, 2) : value;
     }
 
+    /** Extracts the color prefix from a card ID. */
     private static String extractCardColorId(String cardId) {
         for (String color : NUMBERED_CARD_COLORS) {
             if (cardId.startsWith(color + "_")) {
@@ -883,6 +953,7 @@ public class GameScreen extends Stage {
         return null;
     }
 
+    /** Extracts the numeric value from a numbered card ID. */
     private static Integer extractCardNumber(String cardId) {
         if (cardId == null) {
             return null;
@@ -899,6 +970,7 @@ public class GameScreen extends Stage {
         }
     }
 
+    /** Extracts the symbol portion used for card matching. */
     private static String extractCardSymbol(String cardId) {
         if (cardId == null || cardId.isBlank()) {
             return null;
@@ -931,10 +1003,12 @@ public class GameScreen extends Stage {
         return symbol.toString();
     }
 
+    /** Checks whether a card can be played on any pile card. */
     private static boolean isAlwaysPlayableCard(String cardId) {
         return "change_color".equals(cardId) || "change_color_plus_4".equals(cardId);
     }
 
+    /** Resolves the display color for a card ID. */
     private Color getCardColor(String cardId) {
         if (cardId.startsWith("red")) {
             return Color.valueOf("d64045");
@@ -954,11 +1028,13 @@ public class GameScreen extends Stage {
         return Color.GRAY;
     }
 
+    /** Tracks a texture so it can be disposed with the screen. */
     private Texture trackTexture(Texture texture) {
         disposableTextures.add(texture);
         return texture;
     }
 
+    /** Updates layout-sensitive actors after a viewport resize. */
     public void resize(int width, int height) {
         getViewport().update(width, height, true);
         updateWildColorPickerPosition();
@@ -966,6 +1042,7 @@ public class GameScreen extends Stage {
         updateDuoOverlayPosition();
     }
 
+    /** Updates actor actions and overlay positions each frame. */
     @Override
     public void act(float delta) {
         super.act(delta);
@@ -974,6 +1051,7 @@ public class GameScreen extends Stage {
         updateDuoOverlayPosition();
     }
 
+    /** Positions the DUO button in the lower-left corner. */
     private void updateDuoButtonPosition() {
         if (duoButton == null) {
             return;
@@ -981,6 +1059,7 @@ public class GameScreen extends Stage {
         duoButton.setPosition(24f, 24f);
     }
 
+    /** Positions the DUO overlay in the lower-right corner. */
     private void updateDuoOverlayPosition() {
         if (duoOverlayImage == null) {
             return;
@@ -991,6 +1070,7 @@ public class GameScreen extends Stage {
         );
     }
 
+    /** Clears listeners and disposes UI resources. */
     @Override
     public void dispose() {
         NetworkManager.clearGameStartListener(gameStateListener);
@@ -1007,6 +1087,7 @@ public class GameScreen extends Stage {
         private final float width;
         private final float height;
 
+        /** Creates a non-interactive card image actor. */
         private StaticCardActor(String cardId, boolean hidden, float width, float height) {
             super(loadCardTexture(cardId, hidden));
             this.width = width;
@@ -1015,6 +1096,7 @@ public class GameScreen extends Stage {
             setSize(width, height);
         }
 
+        /** Replaces this actor's displayed card texture. */
         private void setCard(String cardId, boolean hidden) {
             setDrawable(new TextureRegionDrawable(loadCardTexture(cardId, hidden)));
             setSize(width, height);
@@ -1022,11 +1104,13 @@ public class GameScreen extends Stage {
     }
 
     private class HoverCardActor extends StaticCardActor {
+        /** Creates a card actor that scales up when hovered. */
         private HoverCardActor(String cardId, boolean hidden, float width, float height) {
             super(cardId, hidden, width, height);
             setOrigin(width / 2f, height / 2f);
             setTouchable(Touchable.enabled);
             addListener(new InputListener() {
+                /** Enlarges the card when the pointer enters. */
                 @Override
                 public void enter(InputEvent event, float x, float y, int pointer, Actor fromActor) {
                     if (pointer != -1) {
@@ -1037,6 +1121,7 @@ public class GameScreen extends Stage {
                     addAction(Actions.scaleTo(CARD_HOVER_SCALE, CARD_HOVER_SCALE, CARD_HOVER_DURATION));
                 }
 
+                /** Restores the card scale when the pointer exits. */
                 @Override
                 public void exit(InputEvent event, float x, float y, int pointer, Actor toActor) {
                     if (pointer != -1) {
@@ -1050,9 +1135,11 @@ public class GameScreen extends Stage {
     }
 
     private final class PlayerHandCardActor extends HoverCardActor {
+        /** Creates a clickable card actor for the local player's hand. */
         private PlayerHandCardActor(int handIndex, String cardId, float width, float height) {
             super(cardId, false, width, height);
             addListener(new ClickListener() {
+                /** Plays the card when it is double-clicked. */
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
                     if (getTapCount() == 2) {
@@ -1064,9 +1151,11 @@ public class GameScreen extends Stage {
     }
 
     private final class DrawPileCardActor extends HoverCardActor {
+        /** Creates a clickable draw pile card actor. */
         private DrawPileCardActor(float width, float height) {
             super("card_back", true, width, height);
             addListener(new ClickListener() {
+                /** Draws cards when the pile is double-clicked. */
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
                     if (getTapCount() == 2) {
@@ -1080,14 +1169,17 @@ public class GameScreen extends Stage {
     private static final class PlayPile {
         private String topCardId;
 
+        /** Stores the current top card of the play pile. */
         private PlayPile(String initialTopCardId) {
             topCardId = initialTopCardId;
         }
 
+        /** Returns the current top play pile card ID. */
         private String getTopCardId() {
             return topCardId;
         }
 
+        /** Checks whether a card can be played on this pile. */
         private boolean canAcceptCard(String cardId) {
             if (isAlwaysPlayableCard(cardId)) {
                 return true;
@@ -1110,6 +1202,7 @@ public class GameScreen extends Stage {
             return topNumber != null && topNumber.equals(playedNumber);
         }
 
+        /** Updates the top card of the play pile. */
         private void placeCard(String cardId) {
             topCardId = cardId;
         }

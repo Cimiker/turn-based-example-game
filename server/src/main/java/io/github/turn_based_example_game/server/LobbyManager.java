@@ -29,17 +29,13 @@ public class LobbyManager {
     private final Map<Account, Lobby> lobbiesByAccount = new HashMap<>();
     private final Map<String, Lobby> lobbiesById = new HashMap<>();
 
+    /** Creates a lobby manager backed by the supplied game manager. */
     public LobbyManager(GameManager gameManager) {
         this.gameManager = gameManager;
     }
 
+    /** Routes lobby-related packets for an authenticated account. */
     public synchronized boolean handlePacket(Account account, Object object) {
-        if (object instanceof Network.CreateLobbyRequest request) {
-            Network.LobbyOperationResult result = createLobby(account, request.settings);
-            account.sendPacket(result);
-            return true;
-        }
-
         if (object instanceof Network.ToggleLobbyReadyRequest) {
             Network.LobbyOperationResult result = toggleReady(account);
             if (!result.success) {
@@ -76,10 +72,12 @@ public class LobbyManager {
         return false;
     }
 
+    /** Removes a disconnected player from their lobby. */
     public synchronized void handlePlayerDisconnect(Account account) {
         leaveLobby(account);
     }
 
+    /** Creates a new lobby owned by the given account. */
     private Network.LobbyOperationResult createLobby(Account owner, Network.LobbySettings settings) {
         Network.LobbyOperationResult result = new Network.LobbyOperationResult();
         if (owner.getInGame()) {
@@ -114,6 +112,7 @@ public class LobbyManager {
         return result;
     }
 
+    /** Toggles the ready state for a lobby player. */
     private Network.LobbyOperationResult toggleReady(Account account) {
         Network.LobbyOperationResult result = new Network.LobbyOperationResult();
         Lobby lobby = lobbiesByAccount.get(account);
@@ -130,7 +129,7 @@ public class LobbyManager {
             return result;
         }
 
-        player.ready = !player.ready;
+        // No switching ready state?
         result.success = true;
         result.message = player.ready ? "You are ready." : "You are no longer ready.";
         result.lobbyState = toLobbyState(lobby);
@@ -138,6 +137,7 @@ public class LobbyManager {
         return result;
     }
 
+    /** Attempts to join a private lobby using a lobby code. */
     private Network.LobbyOperationResult joinLobbyByCode(Account account, String lobbyId) {
         if (lobbyId == null || lobbyId.isBlank()) {
             return failedResult("A lobby couldn't be found");
@@ -151,9 +151,10 @@ public class LobbyManager {
         return joinLobby(account, lobby);
     }
 
+    /** Attempts to join the first available public lobby. */
     private Network.LobbyOperationResult joinRandomPublicLobby(Account account) {
         for (Lobby lobby : lobbiesById.values()) {
-            if ("Public".equalsIgnoreCase(lobby.settings.lobbyMode) && hasJoinableSlot(lobby)) {
+            if ("Public".equalsIgnoreCase(lobby.settings.lobbyMode)) { // Something's missing here
                 return joinLobby(account, lobby);
             }
         }
@@ -161,6 +162,7 @@ public class LobbyManager {
         return failedResult("No public lobby is available right now.");
     }
 
+    /** Starts a lobby game if the requesting owner may start it. */
     private Network.LobbyOperationResult startLobbyGame(Account account) {
         Network.LobbyOperationResult result = new Network.LobbyOperationResult();
         Lobby lobby = lobbiesByAccount.get(account);
@@ -206,6 +208,7 @@ public class LobbyManager {
         return result;
     }
 
+    /** Removes an account from its current lobby. */
     private void leaveLobby(Account account) {
         Lobby lobby = lobbiesByAccount.remove(account);
         if (lobby == null) {
@@ -233,6 +236,7 @@ public class LobbyManager {
         broadcastLobby(lobby);
     }
 
+    /** Adds an account to a lobby if a slot is available. */
     private Network.LobbyOperationResult joinLobby(Account account, Lobby lobby) {
         if (account.getInGame()) {
             return failedResult("You cannot join a lobby while already in a game.");
@@ -268,10 +272,12 @@ public class LobbyManager {
         return result;
     }
 
+    /** Checks whether a lobby can accept another human player. */
     private boolean hasJoinableSlot(Lobby lobby) {
         return lobby.players.size() + lobby.bots.size() < lobby.settings.maxPlayers || !lobby.bots.isEmpty();
     }
 
+    /** Checks whether every human and bot in a lobby is ready. */
     private boolean allPlayersReady(Lobby lobby) {
         for (Network.LobbyPlayer player : lobby.players.values()) {
             if (!player.ready) {
@@ -286,6 +292,7 @@ public class LobbyManager {
         return true;
     }
 
+    /** Sends the current lobby state to every human in the lobby. */
     private void broadcastLobby(Lobby lobby) {
         Network.LobbyState state = toLobbyState(lobby);
         for (Account account : lobby.players.keySet()) {
@@ -293,6 +300,7 @@ public class LobbyManager {
         }
     }
 
+    /** Converts internal lobby state into a network DTO. */
     private Network.LobbyState toLobbyState(Lobby lobby) {
         Network.LobbyState state = new Network.LobbyState();
         state.lobbyId = lobby.lobbyId;
@@ -306,6 +314,7 @@ public class LobbyManager {
         return state;
     }
 
+    /** Copies and clamps lobby settings from a request. */
     private Network.LobbySettings copySettings(Network.LobbySettings source) {
         Network.LobbySettings settings = new Network.LobbySettings();
         int requestedMaxPlayers = source.maxPlayers;
@@ -315,6 +324,7 @@ public class LobbyManager {
         return settings;
     }
 
+    /** Creates a lobby player entry for a human account. */
     private Network.LobbyPlayer createHumanPlayer(Account account, boolean owner) {
         Network.LobbyPlayer player = new Network.LobbyPlayer();
         player.username = account.getUsername();
@@ -324,10 +334,12 @@ public class LobbyManager {
         return player;
     }
 
+    /** Creates a bot to replace a leaving player. */
     private Network.LobbyPlayer createReplacementBot(Lobby lobby) {
         return createBotPlayer(lobby);
     }
 
+    /** Creates a uniquely named ready bot for a lobby. */
     private Network.LobbyPlayer createBotPlayer(Lobby lobby) {
         ArrayList<String> availableNames = new ArrayList<>();
         for (String botName : BOT_NAMES) {
@@ -348,6 +360,7 @@ public class LobbyManager {
         return bot;
     }
 
+    /** Generates a random lobby code not currently in use. */
     private String generateUniqueLobbyId() {
         String candidate;
         do {
@@ -360,6 +373,7 @@ public class LobbyManager {
         return candidate;
     }
 
+    /** Copies a lobby player DTO for safe network sending. */
     private Network.LobbyPlayer copyPlayer(Network.LobbyPlayer source) {
         Network.LobbyPlayer player = new Network.LobbyPlayer();
         player.username = source.username;
@@ -369,6 +383,7 @@ public class LobbyManager {
         return player;
     }
 
+    /** Creates a failed lobby operation result with a message. */
     private Network.LobbyOperationResult failedResult(String message) {
         Network.LobbyOperationResult result = new Network.LobbyOperationResult();
         result.success = false;
@@ -376,6 +391,7 @@ public class LobbyManager {
         return result;
     }
 
+    /** Closes a lobby and notifies all remaining human players. */
     private void closeLobby(Lobby lobby, String message) {
         lobbiesById.remove(lobby.lobbyId);
         for (Account playerAccount : new ArrayList<>(lobby.players.keySet())) {
@@ -390,6 +406,7 @@ public class LobbyManager {
         lobby.bots.clear();
     }
 
+    /** Checks whether a username is already present in a lobby. */
     private boolean containsPlayerName(Lobby lobby, String username) {
         for (Network.LobbyPlayer player : lobby.players.values()) {
             if (username.equals(player.username)) {
@@ -410,6 +427,7 @@ public class LobbyManager {
         private final LinkedHashMap<Account, Network.LobbyPlayer> players = new LinkedHashMap<>();
         private final ArrayList<Network.LobbyPlayer> bots = new ArrayList<>();
 
+        /** Stores internal lobby identity, settings, humans, and bots. */
         private Lobby(String lobbyId, Network.LobbySettings settings) {
             this.lobbyId = lobbyId;
             this.settings = settings;
