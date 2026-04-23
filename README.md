@@ -9,15 +9,14 @@ The goal of the game is to get rid of all your cards. You play cards to the play
 TL;DR This is an UNO clone
 
 ## How to run
-
-## Platforms / Main modules
 1. Open the project in an IDE, preferably IntelliJ. While it's possible to run the game from the command line, running multiple clients simultaneously can be tricky.
 2. Launch the server by running ServerLauncher.java from the server package.
 3. Launch two clients by running Lwjgl3Launcher.java from the lwjgl3 package.
 - It’s recommended to start the clients by pressing the green triangle at the top of the screen in IntelliJ.
 - To avoid issues when running multiple clients, select "Current file" in the Run Configuration settings.
 4. Start playing!
-
+  
+## Platforms / Main modules
 - `core`: Main module with the application logic shared by all platforms.
 - `lwjgl3`: Primary desktop platform using LWJGL3; was called 'desktop' in older docs.
 - `server`: A separate application without access to the `core` module.
