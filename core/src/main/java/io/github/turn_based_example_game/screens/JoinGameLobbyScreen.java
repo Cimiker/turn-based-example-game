@@ -14,14 +14,13 @@ import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import io.github.turn_based_example_game.Main;
 import io.github.turn_based_example_game.NetworkManager;
-import io.github.turn_based_example_game.SoundController;
 
 import java.util.function.Consumer;
 
 public class JoinGameLobbyScreen extends Stage {
     private final Consumer<io.github.turn_based_example_game.Network.LobbyOperationResult> lobbyOperationListener;
 
-    public JoinGameLobbyScreen(Main game, SoundController soundController) {
+    public JoinGameLobbyScreen(Main game) {
         super(new ScreenViewport());
         Gdx.input.setInputProcessor(this);
 
@@ -54,7 +53,7 @@ public class JoinGameLobbyScreen extends Stage {
 
         lobbyOperationListener = result -> {
             if (result.success && result.lobbyState != null) {
-                Gdx.app.postRunnable(() -> game.switchScreen(new GameLobbyScreen(game, soundController)));
+                Gdx.app.postRunnable(() -> game.switchScreen(new GameLobbyScreen(game)));
                 return;
             }
 
@@ -67,7 +66,7 @@ public class JoinGameLobbyScreen extends Stage {
         backButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                Gdx.app.postRunnable(() -> game.switchScreen(new MainMenuScreen(game, soundController)));
+                Gdx.app.postRunnable(() -> game.switchScreen(new MainMenuScreen(game)));
             }
         });
 
@@ -82,14 +81,14 @@ public class JoinGameLobbyScreen extends Stage {
         joinPrivateLobbyButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                Gdx.app.postRunnable(() -> game.switchScreen(new JoinPrivateLobbyScreen(game, soundController)));
+                Gdx.app.postRunnable(() -> game.switchScreen(new JoinPrivateLobbyScreen(game)));
             }
         });
 
         createLobbyButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                Gdx.app.postRunnable(() -> game.switchScreen(new CreateLobbyScreen(game, soundController)));
+                Gdx.app.postRunnable(() -> game.switchScreen(new CreateLobbyScreen(game)));
             }
         });
     }

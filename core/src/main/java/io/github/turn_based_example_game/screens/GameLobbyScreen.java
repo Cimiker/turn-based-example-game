@@ -17,13 +17,11 @@ import io.github.turn_based_example_game.Account;
 import io.github.turn_based_example_game.Main;
 import io.github.turn_based_example_game.Network;
 import io.github.turn_based_example_game.NetworkManager;
-import io.github.turn_based_example_game.SoundController;
 
 import java.util.function.Consumer;
 
 public class GameLobbyScreen extends Stage {
     private final Main game;
-    private final SoundController soundController;
     private final Skin skin;
     private final Label statusLabel;
     private final Table playersTable;
@@ -38,10 +36,9 @@ public class GameLobbyScreen extends Stage {
     private final Consumer<Network.GameStateUpdate> gameStartListener;
     private Network.LobbyState latestLobbyState;
 
-    public GameLobbyScreen(Main game, SoundController soundController) {
+    public GameLobbyScreen(Main game) {
         super(new ScreenViewport());
         this.game = game;
-        this.soundController = soundController;
         this.skin = new Skin(Gdx.files.internal("uiskin.json"));
 
         Gdx.input.setInputProcessor(this);
@@ -57,7 +54,7 @@ public class GameLobbyScreen extends Stage {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 NetworkManager.leaveLobby();
-                Gdx.app.postRunnable(() -> game.switchScreen(new MainMenuScreen(game, soundController)));
+                Gdx.app.postRunnable(() -> game.switchScreen(new MainMenuScreen(game)));
             }
         });
 
@@ -140,7 +137,7 @@ public class GameLobbyScreen extends Stage {
         lobbyStateListener = this::refreshLobby;
         lobbyOperationListener = result -> {
             if (result.lobbyClosed) {
-                Gdx.app.postRunnable(() -> game.switchScreen(new MainMenuScreen(game, soundController)));
+                Gdx.app.postRunnable(() -> game.switchScreen(new MainMenuScreen(game)));
                 return;
             }
             if (result.message != null && !result.message.isBlank()) {
@@ -149,7 +146,7 @@ public class GameLobbyScreen extends Stage {
         };
         gameStartListener = update -> {
             Network.LobbyState lobbySnapshot = latestLobbyState == null ? null : copyLobbyState(latestLobbyState);
-            Gdx.app.postRunnable(() -> game.switchScreen(new GameScreen(game, soundController, lobbySnapshot, update)));
+            Gdx.app.postRunnable(() -> game.switchScreen(new GameScreen(game, lobbySnapshot, update)));
         };
         NetworkManager.setLobbyStateListener(lobbyStateListener);
         NetworkManager.setLobbyOperationListener(lobbyOperationListener);

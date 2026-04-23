@@ -25,7 +25,6 @@ import io.github.turn_based_example_game.Account;
 import io.github.turn_based_example_game.Main;
 import io.github.turn_based_example_game.Network;
 import io.github.turn_based_example_game.NetworkManager;
-import io.github.turn_based_example_game.SoundController;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -59,7 +58,6 @@ public class GameScreen extends Stage {
 
     private final Array<Texture> disposableTextures = new Array<>();
     private final Main game;
-    private final SoundController soundController;
     private final Skin skin;
     private final List<Network.LobbyPlayer> playOrder = new ArrayList<>();
     private final List<String> playerHandCards = new ArrayList<>();
@@ -90,21 +88,20 @@ public class GameScreen extends Stage {
     private int pendingWildHandIndex = -1;
 
     public GameScreen() {
-        this(null, null, null, null);
+        this(null, null, null);
     }
 
-    public GameScreen(Main game, SoundController soundController) {
-        this(game, soundController, null, null);
+    public GameScreen(Main game) {
+        this(game, null, null);
     }
 
-    public GameScreen(Main game, SoundController soundController, Network.LobbyState lobbyState) {
-        this(game, soundController, lobbyState, null);
+    public GameScreen(Main game, Network.LobbyState lobbyState) {
+        this(game, lobbyState, null);
     }
 
-    public GameScreen(Main game, SoundController soundController, Network.LobbyState lobbyState, Network.GameStateUpdate initialGameState) {
+    public GameScreen(Main game, Network.LobbyState lobbyState, Network.GameStateUpdate initialGameState) {
         super(new ScreenViewport());
         this.game = game;
-        this.soundController = soundController;
         skin = new Skin(Gdx.files.internal("uiskin.json"));
         playOrder.addAll(buildPlayOrder(lobbyState != null ? lobbyState : NetworkManager.getCurrentLobby()));
         initializePlayerHand(initialGameState);
@@ -499,7 +496,7 @@ public class GameScreen extends Stage {
         if (game == null) {
             return;
         }
-        game.switchScreen(new GameEndScreen(game, soundController, end));
+        game.switchScreen(new GameEndScreen(game, end));
     }
 
     private void refreshSynchronizedUi() {

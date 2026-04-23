@@ -18,7 +18,6 @@ import java.io.IOException;
 public class Main extends ApplicationAdapter {
     Preferences prefs;
     private Stage currentStage;
-    public SoundController soundController;
 
     @Override
     public void create() {
@@ -38,20 +37,18 @@ public class Main extends ApplicationAdapter {
             prefs.flush();
         }
 
-        soundController = new SoundController();
-
         if(Account.load()) {
             Account.authenticate(success -> {
                 Gdx.app.postRunnable(() -> {
                     if(success){
-                        switchScreen(new MainMenuScreen(this, soundController));
+                        switchScreen(new MainMenuScreen(this));
                     }else{
-                        switchScreen(new LoginScreen(this, soundController));
+                        switchScreen(new LoginScreen(this));
                     }
                 });
             });
         } else {
-            switchScreen(new LoginScreen(this, soundController));
+            switchScreen(new LoginScreen(this));
         }
     }
 

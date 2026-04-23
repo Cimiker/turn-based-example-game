@@ -15,7 +15,6 @@ import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import io.github.turn_based_example_game.Main;
 import io.github.turn_based_example_game.NetworkManager;
-import io.github.turn_based_example_game.SoundController;
 
 import java.util.function.Consumer;
 
@@ -25,7 +24,7 @@ public class JoinPrivateLobbyScreen extends Stage {
     private final Runnable lobbyStateListener;
     private final Consumer<io.github.turn_based_example_game.Network.LobbyOperationResult> lobbyOperationListener;
 
-    public JoinPrivateLobbyScreen(Main game, SoundController soundController) {
+    public JoinPrivateLobbyScreen(Main game) {
         super(new ScreenViewport());
         Gdx.input.setInputProcessor(this);
 
@@ -71,7 +70,7 @@ public class JoinPrivateLobbyScreen extends Stage {
 
             if (NetworkManager.getCurrentLobby() != null) {
                 navigatingToLobby = true;
-                Gdx.app.postRunnable(() -> game.switchScreen(new GameLobbyScreen(game, soundController)));
+                Gdx.app.postRunnable(() -> game.switchScreen(new GameLobbyScreen(game)));
             }
         };
 
@@ -79,7 +78,7 @@ public class JoinPrivateLobbyScreen extends Stage {
             if (result.success && result.lobbyState != null) {
                 if (!navigatingToLobby) {
                     navigatingToLobby = true;
-                    Gdx.app.postRunnable(() -> game.switchScreen(new GameLobbyScreen(game, soundController)));
+                    Gdx.app.postRunnable(() -> game.switchScreen(new GameLobbyScreen(game)));
                 }
                 return;
             }
@@ -115,7 +114,7 @@ public class JoinPrivateLobbyScreen extends Stage {
         backButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                Gdx.app.postRunnable(() -> game.switchScreen(new JoinGameLobbyScreen(game, soundController)));
+                Gdx.app.postRunnable(() -> game.switchScreen(new JoinGameLobbyScreen(game)));
             }
         });
     }

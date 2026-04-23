@@ -9,13 +9,12 @@ import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import io.github.turn_based_example_game.Main;
-import io.github.turn_based_example_game.SoundController;
 
 public class TutorialScreen extends Stage {
 
     Image menuBoxImage;
 
-    public TutorialScreen(Main game, SoundController soundController) {
+    public TutorialScreen(Main game) {
         super(new ScreenViewport());
 
         // Set this screen to handle user input
@@ -86,7 +85,7 @@ public class TutorialScreen extends Stage {
         backButton.addListener(new ClickListener(){
             @Override
             public void clicked(InputEvent event, float x, float y){
-                Gdx.app.postRunnable(() -> game.switchScreen(new MainMenuScreen(game, soundController)));
+                Gdx.app.postRunnable(() -> game.switchScreen(new MainMenuScreen(game)));
             }
         });
     }

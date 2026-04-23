@@ -9,7 +9,6 @@ import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import io.github.turn_based_example_game.Account;
 import io.github.turn_based_example_game.Main;
-import io.github.turn_based_example_game.SoundController;
 
 /**
  * Displays the main menu after login. Provides navigation
@@ -17,7 +16,7 @@ import io.github.turn_based_example_game.SoundController;
  */
 public class MainMenuScreen extends Stage {
 
-    public MainMenuScreen(Main game, SoundController soundController) {
+    public MainMenuScreen(Main game) {
         super(new ScreenViewport());
 
         // Set this screen to handle user input
@@ -67,7 +66,7 @@ public class MainMenuScreen extends Stage {
         startButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                Gdx.app.postRunnable(() -> game.switchScreen(new JoinGameLobbyScreen(game, soundController)));
+                Gdx.app.postRunnable(() -> game.switchScreen(new JoinGameLobbyScreen(game)));
             }
         });
 
@@ -75,7 +74,7 @@ public class MainMenuScreen extends Stage {
         tutorialButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                Gdx.app.postRunnable(() -> game.switchScreen(new TutorialScreen(game, soundController)));
+                Gdx.app.postRunnable(() -> game.switchScreen(new TutorialScreen(game)));
             }
         });
 
@@ -83,7 +82,7 @@ public class MainMenuScreen extends Stage {
         settingsButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                Gdx.app.postRunnable(() -> game.switchScreen(new SettingsScreen(game, soundController)));
+                Gdx.app.postRunnable(() -> game.switchScreen(new SettingsScreen(game)));
             }
         });
 
@@ -92,9 +91,7 @@ public class MainMenuScreen extends Stage {
             @Override
             public void clicked(InputEvent event, float x, float y){
                 Account.delete(); // Clear saved account info
-                //soundController.stopMenuTheme();
-                //soundController.disposeMenuTheme();
-                Gdx.app.postRunnable(() -> game.switchScreen(new LoginScreen(game, soundController)));
+                Gdx.app.postRunnable(() -> game.switchScreen(new LoginScreen(game)));
             }
         });
 

@@ -17,11 +17,10 @@ import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import io.github.turn_based_example_game.Main;
 import io.github.turn_based_example_game.Network;
 import io.github.turn_based_example_game.NetworkManager;
-import io.github.turn_based_example_game.SoundController;
 
 public class CreateLobbyScreen extends Stage {
 
-    public CreateLobbyScreen(Main game, SoundController soundController) {
+    public CreateLobbyScreen(Main game) {
         super(new ScreenViewport());
         Gdx.input.setInputProcessor(this);
 
@@ -86,14 +85,14 @@ public class CreateLobbyScreen extends Stage {
                 settings.fillWithBots = "Yes".contentEquals(botsButtonGroup.getChecked().getText());
 
                 NetworkManager.createLobby(settings);
-                Gdx.app.postRunnable(() -> game.switchScreen(new GameLobbyScreen(game, soundController)));
+                Gdx.app.postRunnable(() -> game.switchScreen(new GameLobbyScreen(game)));
             }
         });
 
         backButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                Gdx.app.postRunnable(() -> game.switchScreen(new JoinGameLobbyScreen(game, soundController)));
+                Gdx.app.postRunnable(() -> game.switchScreen(new JoinGameLobbyScreen(game)));
             }
         });
     }

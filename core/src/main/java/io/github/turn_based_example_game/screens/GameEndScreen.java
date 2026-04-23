@@ -16,17 +16,16 @@ import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import io.github.turn_based_example_game.Main;
 import io.github.turn_based_example_game.Network;
 import io.github.turn_based_example_game.NetworkManager;
-import io.github.turn_based_example_game.SoundController;
 
 public class GameEndScreen extends Stage {
     private final Skin skin;
     private final Texture backgroundTexture;
 
     public GameEndScreen() {
-        this(null, null, null);
+        this(null, null);
     }
 
-    public GameEndScreen(Main game, SoundController soundController, Network.GameEnd end) {
+    public GameEndScreen(Main game, Network.GameEnd end) {
         super(new ScreenViewport());
         skin = new Skin(Gdx.files.internal("uiskin.json"));
         backgroundTexture = Gdx.files.internal("menuBackground.png").exists()
@@ -60,7 +59,7 @@ public class GameEndScreen extends Stage {
             public void clicked(InputEvent event, float x, float y) {
                 NetworkManager.leaveGame();
                 if (game != null) {
-                    game.switchScreen(new MainMenuScreen(game, soundController));
+                    game.switchScreen(new MainMenuScreen(game));
                 }
             }
         });

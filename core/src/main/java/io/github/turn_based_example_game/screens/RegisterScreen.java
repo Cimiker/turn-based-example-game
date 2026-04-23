@@ -9,13 +9,12 @@ import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import io.github.turn_based_example_game.Account;
 import io.github.turn_based_example_game.Main;
-import io.github.turn_based_example_game.SoundController;
 
 public class RegisterScreen extends Stage {
     // Label to display registration status (e.g., errors)
     private final Label statusLabel;
 
-    public RegisterScreen(Main game, SoundController soundController) {
+    public RegisterScreen(Main game) {
         super(new ScreenViewport());
 
         // Set this screen to handle user input
@@ -76,7 +75,7 @@ public class RegisterScreen extends Stage {
                 Account.register(usernameField.getText(), passwordField.getText(), success -> {
                     Gdx.app.postRunnable(() -> {
                         if (success) {
-                            game.switchScreen(new LoginScreen(game, soundController));
+                            game.switchScreen(new LoginScreen(game));
                         } else {
                             statusLabel.setText("Login failed. Try again.");
                         }
@@ -90,7 +89,7 @@ public class RegisterScreen extends Stage {
         backButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                game.switchScreen(new LoginScreen(game, soundController));
+                game.switchScreen(new LoginScreen(game));
             }
         });
     }

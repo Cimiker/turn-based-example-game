@@ -1,17 +1,13 @@
 package io.github.turn_based_example_game.screens;
 
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
-import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import io.github.turn_based_example_game.Main;
-import io.github.turn_based_example_game.SoundController;
 
 /**
  * A screen for adjusting settings such as sound volumes and display mode.
@@ -19,7 +15,7 @@ import io.github.turn_based_example_game.SoundController;
  */
 public class SettingsScreen extends Stage {
 
-    public SettingsScreen(Main game, SoundController soundController) {
+    public SettingsScreen(Main game) {
         super(new ScreenViewport());
 
         // Set this screen to receive input events
@@ -35,11 +31,9 @@ public class SettingsScreen extends Stage {
         // Create volume labels and sliders for menu and game music
         Label menuSoundLable = new Label("Menu Sound", skin);
         Slider menuSoundSlider = new Slider(0, 100, 2, false, skin);
-        //menuSoundSlider.setValue(soundController.menuThemeVolume); // Set initial value
 
         Label gameSoundLable = new Label("Game Sound", skin);
         Slider gameSoundSlider = new Slider(0, 100, 2, false, skin);
-        //gameSoundSlider.setValue(soundController.gameThemeVolume); // Set initial value
 
         // Create buttons for fullscreen toggle and going back to main menu
         TextButton fullscreenButton = new TextButton("Toggle Fullscreen", skin);
@@ -71,7 +65,7 @@ public class SettingsScreen extends Stage {
         backButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                Gdx.app.postRunnable(() -> game.switchScreen(new MainMenuScreen(game, soundController)));
+                Gdx.app.postRunnable(() -> game.switchScreen(new MainMenuScreen(game)));
             }
         });
 
@@ -87,22 +81,5 @@ public class SettingsScreen extends Stage {
             }
         });
 
-        // Update the menu music volume when the slider value changes
-        menuSoundSlider.addListener(new ChangeListener() {
-            @Override
-            public void changed(ChangeEvent event, Actor actor) {
-                int soundValue = (int) menuSoundSlider.getValue();
-                //soundController.changeMenuThemeVolume(soundValue);
-            }
-        });
-
-        // Update the game music volume when the slider value changes
-        gameSoundSlider.addListener(new ChangeListener() {
-            @Override
-            public void changed(ChangeEvent event, Actor actor) {
-                int soundValue = (int) gameSoundSlider.getValue();
-                //soundController.changeGameThemeVolume(soundValue);
-            }
-        });
     }
 }

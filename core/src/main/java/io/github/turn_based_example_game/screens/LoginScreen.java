@@ -9,7 +9,6 @@ import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import io.github.turn_based_example_game.Account;
 import io.github.turn_based_example_game.Main;
-import io.github.turn_based_example_game.SoundController;
 
 /**
  * Login screen that allows the user to input credentials
@@ -20,7 +19,7 @@ public class LoginScreen extends Stage {
     private String username;
     private String password;
 
-    public LoginScreen(Main game, SoundController soundController) {
+    public LoginScreen(Main game) {
         super(new ScreenViewport());
 
         // Set this screen to handle input
@@ -81,7 +80,7 @@ public class LoginScreen extends Stage {
                     Gdx.app.postRunnable(() -> {
                         if (success) {
                             // If successful, go to main menu
-                            game.switchScreen(new MainMenuScreen(game, soundController));
+                            game.switchScreen(new MainMenuScreen(game));
                         } else {
                             // Show failure message
                             statusLabel.setText("Login failed. Try again.");
@@ -95,7 +94,7 @@ public class LoginScreen extends Stage {
         registerButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                game.switchScreen(new RegisterScreen(game, soundController));
+                game.switchScreen(new RegisterScreen(game));
             }
         });
     }
