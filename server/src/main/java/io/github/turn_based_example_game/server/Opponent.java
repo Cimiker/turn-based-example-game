@@ -1,14 +1,16 @@
 package io.github.turn_based_example_game.server;
 
+import io.github.turn_based_example_game.Card;
+import io.github.turn_based_example_game.CardColor;
+import io.github.turn_based_example_game.CardSymbol;
+
 import java.util.List;
 import java.util.Objects;
 import java.util.Random;
 
 public class Opponent {
     private static final long ACTION_DELAY_MS = 1000L;
-    private static final String[] CARD_COLORS = {"red", "green", "blue", "yellow"};
-    private static final String CHANGE_COLOR = "change_color";
-    private static final String CHANGE_COLOR_PLUS_4 = "change_color_plus_4";
+    private static final CardColor[] CARD_COLORS = CardColor.values();
 
     private final Random random;
 
@@ -20,35 +22,31 @@ public class Opponent {
         this.random = Objects.requireNonNull(random);
     }
 
-    public Decision chooseAction(String topPlayPileCardId, List<String> handCardIds) {
+    public Decision chooseAction(Card topPlayPileCard, List<Card> handCards) {
         pauseBeforeAction();
 
-        if (handCardIds == null || handCardIds.isEmpty()) {
+        if (handCards == null || handCards.isEmpty()) {
             return Decision.draw();
         }
 
-        Decision decision = findWildDrawFour(handCardIds);
+        Decision decision = findWildDrawFour(handCards);
         if (decision != null) {
             return decision;
         }
 
-        String topSymbol = extractCardSymbol(topPlayPileCardId);
-        if (topSymbol != null) {
-            decision = findMatchingSymbol(handCardIds, topSymbol);
+        decision = findMatchingSymbol(handCards, topPlayPileCard.symbol());
+        if (decision != null) {
+            return decision;
+        }
+
+        if (topPlayPileCard.color() != null) {
+            decision = findMatchingColor(handCards, topPlayPileCard.color());
             if (decision != null) {
                 return decision;
             }
         }
 
-        String topColor = extractCardColor(topPlayPileCardId);
-        if (topColor != null) {
-            decision = findMatchingColor(handCardIds, topColor);
-            if (decision != null) {
-                return decision;
-            }
-        }
-
-        decision = findWildChangeColor(handCardIds);
+        decision = findWildChangeColor(handCards);
         if (decision != null) {
             return decision;
         }
@@ -56,55 +54,55 @@ public class Opponent {
         return Decision.draw();
     }
 
-    private Decision findWildDrawFour(List<String> handCardIds) {
-        for (int i = 0; i < handCardIds.size(); i++) {
-            String cardId = handCardIds.get(i);
-            if (CHANGE_COLOR_PLUS_4.equals(cardId)) {
-                return Decision.play(i, cardId, withRandomColor(cardId));
+    private Decision findWildDrawFour(List<Card> handCards) {
+        for (int i = 0; i < handCards.size(); i++) {
+            Card card = handCards.get(i);
+            if (card.symbol() == CardSymbol.CHANGE_COLOR_PLUS_4) {
+                return Decision.play(i, card.withColor(randomColor()));
             }
         }
         return null;
     }
 
-    private Decision findMatchingSymbol(List<String> handCardIds, String topSymbol) {
-        for (int i = 0; i < handCardIds.size(); i++) {
-            String cardId = handCardIds.get(i);
-            if (topSymbol.equals(extractCardSymbol(cardId))) {
-                return Decision.play(i, cardId, resolvePlayedCardId(cardId));
+    private Decision findMatchingSymbol(List<Card> handCards, CardSymbol topSymbol) {
+        for (int i = 0; i < handCards.size(); i++) {
+            Card card = handCards.get(i);
+            if (card.symbol() == topSymbol) {
+                return Decision.play(i, resolvePlayedCard(card));
             }
         }
         return null;
     }
 
-    private Decision findMatchingColor(List<String> handCardIds, String topColor) {
-        for (int i = 0; i < handCardIds.size(); i++) {
-            String cardId = handCardIds.get(i);
-            if (topColor.equals(extractCardColor(cardId))) {
-                return Decision.play(i, cardId, resolvePlayedCardId(cardId));
+    private Decision findMatchingColor(List<Card> handCards, CardColor topColor) {
+        for (int i = 0; i < handCards.size(); i++) {
+            Card card = handCards.get(i);
+            if (card.color() == topColor) {
+                return Decision.play(i, resolvePlayedCard(card));
             }
         }
         return null;
     }
 
-    private Decision findWildChangeColor(List<String> handCardIds) {
-        for (int i = 0; i < handCardIds.size(); i++) {
-            String cardId = handCardIds.get(i);
-            if (CHANGE_COLOR.equals(cardId)) {
-                return Decision.play(i, cardId, withRandomColor(cardId));
+    private Decision findWildChangeColor(List<Card> handCards) {
+        for (int i = 0; i < handCards.size(); i++) {
+            Card card = handCards.get(i);
+            if (card.symbol() == CardSymbol.CHANGE_COLOR) {
+                return Decision.play(i, card.withColor(randomColor()));
             }
         }
         return null;
     }
 
-    private String withRandomColor(String wildCardId) {
-        return CARD_COLORS[random.nextInt(CARD_COLORS.length)] + "_" + wildCardId;
+    private CardColor randomColor() {
+        return CARD_COLORS[random.nextInt(CARD_COLORS.length)];
     }
 
-    private String resolvePlayedCardId(String cardId) {
-        if (CHANGE_COLOR.equals(cardId) || CHANGE_COLOR_PLUS_4.equals(cardId)) {
-            return withRandomColor(cardId);
+    private Card resolvePlayedCard(Card card) {
+        if (card.isWild()) {
+            return card.withColor(randomColor());
         }
-        return cardId;
+        return card;
     }
 
     private void pauseBeforeAction() {
@@ -115,70 +113,23 @@ public class Opponent {
         }
     }
 
-    private static String extractCardColor(String cardId) {
-        if (cardId == null) {
-            return null;
-        }
-
-        for (String color : CARD_COLORS) {
-            if (cardId.startsWith(color + "_")) {
-                return color;
-            }
-        }
-        return null;
-    }
-
-    private static String extractCardSymbol(String cardId) {
-        if (cardId == null || cardId.isBlank()) {
-            return null;
-        }
-        if (CHANGE_COLOR.equals(cardId) || CHANGE_COLOR_PLUS_4.equals(cardId)) {
-            return cardId;
-        }
-
-        String[] parts = cardId.split("_");
-        if (parts.length < 2) {
-            return cardId;
-        }
-
-        int startIndex = extractCardColor(cardId) == null ? 0 : 1;
-        int endIndex = parts.length;
-        if (endIndex > startIndex && ("filled".equals(parts[endIndex - 1]) || "white".equals(parts[endIndex - 1]))) {
-            endIndex--;
-        }
-        if (startIndex >= endIndex) {
-            return cardId;
-        }
-
-        StringBuilder symbol = new StringBuilder();
-        for (int i = startIndex; i < endIndex; i++) {
-            if (i > startIndex) {
-                symbol.append('_');
-            }
-            symbol.append(parts[i]);
-        }
-        return symbol.toString();
-    }
-
     public static final class Decision {
         public final Action action;
         public final int handIndex;
-        public final String handCardId;
-        public final String playPileCardId;
+        public final Card playedCard;
 
-        private Decision(Action action, int handIndex, String handCardId, String playPileCardId) {
+        private Decision(Action action, int handIndex, Card playedCard) {
             this.action = action;
             this.handIndex = handIndex;
-            this.handCardId = handCardId;
-            this.playPileCardId = playPileCardId;
+            this.playedCard = playedCard;
         }
 
-        public static Decision play(int handIndex, String handCardId, String playPileCardId) {
-            return new Decision(Action.PLAY, handIndex, handCardId, playPileCardId);
+        public static Decision play(int handIndex, Card playedCard) {
+            return new Decision(Action.PLAY, handIndex, playedCard);
         }
 
         public static Decision draw() {
-            return new Decision(Action.DRAW, -1, null, null);
+            return new Decision(Action.DRAW, -1, null);
         }
     }
 

@@ -24,7 +24,7 @@ Start from `CreateLobbyScreen`. The "Create Lobby" button should collect the sel
 <details>
 <summary>Tip 2</summary>
 
-The server receives lobby requests in `LobbyManager.handlePacket`. Check that `Network.CreateLobbyRequest` is handled and that the server sends a `Network.LobbyOperationResult` back to the player.
+The server receives lobby requests in `LobbyManager.handlePacket`. Check that `Network.CreateLobbyRequest` is handled.
 
 </details>
 
@@ -33,9 +33,34 @@ The server receives lobby requests in `LobbyManager.handlePacket`. Check that `N
 
 In `CreateLobbyScreen`, create a `Network.LobbySettings` object from the selected max player count, lobby mode, and bot setting. Send it with `NetworkManager.createLobby(settings)`.
 
-In `LobbyManager`, handle `Network.CreateLobbyRequest` by calling `createLobby(account, request.settings)`. The new lobby must be stored in both `lobbiesByAccount` and `lobbiesById`. The owner must be added as a human player, bots must be added if requested, and the result must include `success = true` and `lobbyState = toLobbyState(lobby)`.
+The function should look like:
+```
+    createLobbyButton.addListener(new ClickListener() {
+            /** Sends the selected lobby settings and opens the lobby screen. */
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                Network.LobbySettings settings = new Network.LobbySettings();
+                settings.maxPlayers = Integer.parseInt(maxPlayersButtonGroup.getChecked().getText().toString());
+                settings.lobbyMode = lobbyModeButtonGroup.getChecked().getText().toString();
+                settings.fillWithBots = "Yes".contentEquals(botsButtonGroup.getChecked().getText());
+                
+                NetworkManager.createLobby(settings);
+                
+                Gdx.app.postRunnable(() -> game.switchScreen(new GameLobbyScreen(game)));
+            }
+        });
+```
 
-The client should only move to the lobby screen after the server confirms that lobby creation succeeded.
+In `LobbyManager`, handle `Network.CreateLobbyRequest` by calling `createLobby(account, request.settings)`.
+
+The code to add to the handlePacket function:
+```
+    if (object instanceof Network.CreateLobbyRequest request) {
+        Network.LobbyOperationResult result = createLobby(account, request.settings);
+        account.sendPacket(result);
+        return true;
+    }
+```
 
 </details>
 
@@ -62,7 +87,44 @@ Lobby codes are stored on the server in `LobbyManager.lobbiesById`. Make sure th
 
 In `JoinPrivateLobbyScreen`, reject lobby codes that are not exactly 5 letters. Convert valid input to uppercase before sending it to the server.
 
-In `LobbyManager.joinLobbyByCode`, reject null or blank codes. Trim and uppercase the code before calling `lobbiesById.get(...)`. If a lobby is found, call `joinLobby(account, lobby)`. A successful join must add the account to the lobby, remove a bot if the lobby is bot-filled, store the account in `lobbiesByAccount`, return a successful `LobbyOperationResult`, and broadcast the updated lobby state.
+The function should look like:
+
+```
+    joinLobbyButton.addListener(new ClickListener() {
+            /** Validates the entered lobby code and sends a join request. */
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                statusLabel.setText("");
+                    statusLabel.setText("Server is not available");
+                    return;
+                }
+                
+                String lobbyCode = lobbyCodeField.getText().trim().toUpperCase();
+                if (lobbyCode.length() != 5) {
+                    statusLabel.setText("A lobby couldn't be found");
+                    return;
+        });
+```
+
+In `LobbyManager.joinLobbyByCode`, reject null or blank codes. Trim and uppercase the code before calling `lobbiesById.get(...)`.
+
+The function should look like:
+
+```
+    /** Attempts to join a private lobby using a lobby code. */
+    private Network.LobbyOperationResult joinLobbyByCode(Account account, String lobbyId) {
+        if (lobbyId == null || lobbyId.isBlank()) {
+            return failedResult("A lobby couldn't be found");
+        }
+
+        Lobby lobby = lobbiesById.get(lobbyId.trim().toUpperCase());
+        if (lobby == null) {
+            return failedResult("A lobby couldn't be found");
+        }
+
+        return joinLobby(account, lobby);
+    }
+```
 
 </details>
 
@@ -80,24 +142,41 @@ Start from `JoinGameLobbyScreen`. The "Join Public Lobby" button should call `Ne
 <details>
 <summary>Tip 2</summary>
 
-The server method `LobbyManager.joinRandomPublicLobby` should search through existing lobbies and only join lobbies whose mode is public.
+The server method `LobbyManager.joinRandomPublicLobby` should search through existing lobbies and only join lobbies whose mode is public and that have an open spot.
 
 </details>
 
 <details>
 <summary>Solution</summary>
 
-In `LobbyManager.handlePacket`, handle `Network.JoinPublicLobbyRequest` by calling `joinRandomPublicLobby(account)` and sending the result back to the account.
+The `joinPublicLobbyButton` in `JoinGameLobbyScreen` should look like
+```
+    joinPublicLobbyButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                statusLabel.setText("");
+                NetworkManager.joinPublicLobby();
+            }
+    });
+```
 
-In `joinRandomPublicLobby`, loop through `lobbiesById.values()`. Pick a lobby only if `lobby.settings.lobbyMode` is `"Public"` and `hasJoinableSlot(lobby)` returns true. Use a case-insensitive comparison for the lobby mode. Then call `joinLobby(account, lobby)`.
+The `joinRandomPublicLobby` function in `LobbyManager` should look like
+```
+    private Network.LobbyOperationResult joinRandomPublicLobby(Account account) {
+        for (Lobby lobby : lobbiesById.values()) {
+            if ("Public".equalsIgnoreCase(lobby.settings.lobbyMode) && hasJoinableSlot(lobby)) {
+                return joinLobby(account, lobby);
+            }
+        }
 
-In `joinLobby`, make sure humans can replace bots in bot-filled lobbies by removing one bot before adding the human player.
-
+        return failedResult("No public lobby is available right now.");
+    }
+```
 </details>
 
 ### 4. Fix ready and start game logic
 
-The lobby ready system is currently broken. Players should be able to toggle ready status. The lobby owner should only be able to start the game when every player is ready. Non-owners must not be able to start the game.
+The lobby ready system is currently broken. Players should be able to toggle ready status and it should be broadcast to others. The lobby owner should only be able to start the game when every player is ready. Non-owners must not be able to start the game.
 
 <details>
 <summary>Tip 1</summary>
@@ -116,11 +195,57 @@ Do not trust only the client. The server must also check that the requester is t
 <details>
 <summary>Solution</summary>
 
-In `GameLobbyScreen`, the ready button should call `NetworkManager.toggleReady()`. The start button should call `NetworkManager.startLobbyGame()` only when it is enabled.
+In the `GameLobbyScreen` constructor, the listeners for `readyButton` and `startGameButton` should look like
 
-In `LobbyManager.toggleReady`, find the player's lobby using `lobbiesByAccount`, find the player's `Network.LobbyPlayer`, flip `player.ready`, set the result message, attach the current lobby state, and broadcast the lobby.
+```
+    readyButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                NetworkManager.toggleReady();
+            }
+        });
+```
+```
+    startGameButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                if (!startGameButton.isDisabled()) {
+                    NetworkManager.startLobbyGame();
+                }
+            }
+        });
+```
 
-In `LobbyManager.startLobbyGame`, check that the requester exists and has `owner = true`. Then check `allPlayersReady(lobby)`. Only after these checks pass should the server call `gameManager.startLobbyGame(...)`, remove the lobby from the lobby maps, and clear the lobby players and bots.
+In `LobbyManager`, in `toggleReady` instead of the commented line should be the line
+```
+    player.ready = !player.ready;
+```
+And for the start of the function `startLobbyGame` should look like
+```
+    private Network.LobbyOperationResult startLobbyGame(Account account) {
+        Network.LobbyOperationResult result = new Network.LobbyOperationResult();
+        Lobby lobby = lobbiesByAccount.get(account);
+        if (lobby == null) {
+            result.success = false;
+            result.message = "You are not in a lobby.";
+            return result;
+        }
+
+        Network.LobbyPlayer requester = lobby.players.get(account);
+        if (requester == null || !requester.owner) {
+            result.success = false;
+            result.message = "Only the lobby owner can start the game.";
+            result.lobbyState = toLobbyState(lobby);
+            return result;
+        }
+
+        if (!allPlayersReady(lobby)) {
+            result.success = false;
+            result.message = "All players must be ready before the game can start.";
+            result.lobbyState = toLobbyState(lobby);
+            return result;
+        }
+```
 
 </details>
 
@@ -131,7 +256,7 @@ Card dealing is currently broken. Each game should start with a shuffled draw pi
 <details>
 <summary>Tip 1</summary>
 
-Start from `GameManager.startLobbyGame`. A new game session should create a draw pile, choose the first play pile card, create game players, and deal each player a starting hand.
+Start from `GameManager.startLobbyGame`. A new game session should create a draw pile, choose the first play pile card, create game players, and deal each player a starting hand. You can use this method to find the other necessary functions.
 
 </details>
 
@@ -145,12 +270,22 @@ Look at `createShuffledDrawPile`, `dealStartingHand`, `drawCardToPlayer`, and `d
 <details>
 <summary>Solution</summary>
 
-In `createShuffledDrawPile`, build a list containing numbered cards, action cards, and wild cards. After all cards have been added, call `Collections.shuffle(drawPile, random)`.
-
-In `startLobbyGame`, add the shuffled cards to `session.drawPile`, set `session.topPlayPileCardId` with `drawOpeningPlayPileCard(session.drawPile)`, and call `dealStartingHand(session, gamePlayer)` for every player.
-
-In `dealStartingHand`, draw exactly `DEFAULT_HAND_SIZE` cards. In `drawCardFromPile`, remove one card from the draw pile each time. If the draw pile is empty, create a new shuffled draw pile before drawing.
-
+In `createShuffledDrawPile`, before the return statement you need to add
+```
+    Collections.shuffle(drawPile, random);
+```
+The `drawCardFromPile` should look like
+```
+    private Card drawCardFromPile(LobbyGameSession session) {
+        if (session.drawPile.isEmpty()) {
+            session.drawPile.addAll(createShuffledDrawPile());
+        }
+        if (session.drawPile.isEmpty()) {
+            return null;
+        }
+        return session.drawPile.remove(session.drawPile.size() - 1);
+    }
+```
 </details>
 
 ### 6. Fix passing the turn to the next player
@@ -174,7 +309,7 @@ Look at `advanceToNextTurn` and `broadcastLobbyGameState`. `advanceToNextTurn` s
 <details>
 <summary>Solution</summary>
 
-In `handleHumanPlay`, after removing the played card from the current player's hand and applying any card effects, call `advanceToNextTurn(session, extractTurnAdvanceCount(resolvedPlayPileCardId))`. Then call `broadcastLobbyGameState(session)` and `resolveCurrentTurn(session)`.
+In `handleHumanPlay`, after removing the played card from the current player's hand and applying any card effects, call `advanceToNextTurn(session, CardRules.turnAdvanceCount(resolvedPlayedCard))`. Then call `broadcastLobbyGameState(session)` and `resolveCurrentTurn(session)`.
 
 In `handleHumanDraw`, after the player draws a card and the draw action is finished, call `advanceToNextTurn(session)`, then broadcast the updated game state.
 
@@ -186,31 +321,33 @@ This how the full function should look like
 
 ```
     private void handleHumanPlay(LobbyGameSession session, LobbyGamePlayer currentPlayer, Network.GameTurnActionRequest request) {
-        if (request.handIndex < 0 || request.handIndex >= currentPlayer.handCardIds.size()) {
+        if (request.handIndex < 0 || request.handIndex >= currentPlayer.handCards.size()) {
             return;
         }
 
-        String handCardId = currentPlayer.handCardIds.get(request.handIndex);
-        if (!canPlayCard(session.topPlayPileCardId, handCardId)) {
+        Card handCard = currentPlayer.handCards.get(request.handIndex);
+        if (!CardRules.canPlay(session.topPlayPileCard, handCard)) {
             return;
         }
 
-        String resolvedPlayPileCardId = resolvePlayedPileCard(handCardId, request.chosenColor);
-        if (resolvedPlayPileCardId == null) {
+        Card resolvedPlayedCard = CardRules.resolvePlayedCard(handCard, request.chosenColor);
+        if (resolvedPlayedCard == null) {
             return;
         }
 
-        currentPlayer.handCardIds.remove(request.handIndex);
+        currentPlayer.handCards.remove(request.handIndex);
         refreshPlayersWithTwoCards(session);
-        session.topPlayPileCardId = resolvedPlayPileCardId;
-        if (currentPlayer.handCardIds.isEmpty()) {
+        session.topPlayPileCard = resolvedPlayedCard;
+        if (currentPlayer.handCards.isEmpty()) {
             broadcastLobbyGameState(session);
             finishLobbyGame(session, currentPlayer.username);
             return;
         }
-        applyTurnDirectionChange(session, resolvedPlayPileCardId);
-        session.pendingDrawCount = extractDrawPenalty(resolvedPlayPileCardId);
-        advanceToNextTurn(session, extractTurnAdvanceCount(resolvedPlayPileCardId));
+        if (CardRules.reversesDirection(resolvedPlayedCard)) {
+            session.turnDirection *= -1;
+        }
+        session.pendingDrawCount = CardRules.drawPenalty(resolvedPlayedCard);
+        advanceToNextTurn(session, CardRules.turnAdvanceCount(resolvedPlayedCard));
         broadcastLobbyGameState(session);
         maybeHandleBotDuoCallout(session);
         resolveCurrentTurn(session);

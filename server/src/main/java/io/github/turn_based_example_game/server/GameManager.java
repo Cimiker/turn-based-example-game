@@ -1,7 +1,13 @@
 package io.github.turn_based_example_game.server;
 
 import com.esotericsoftware.kryonet.Connection;
-import io.github.turn_based_example_game.server.Network.JoinGameRequest;
+import io.github.turn_based_example_game.Card;
+import io.github.turn_based_example_game.CardColor;
+import io.github.turn_based_example_game.CardRules;
+import io.github.turn_based_example_game.CardStyle;
+import io.github.turn_based_example_game.CardSymbol;
+import io.github.turn_based_example_game.Network;
+import io.github.turn_based_example_game.Network.JoinGameRequest;
 import io.github.turn_based_example_game.server.game.Game;
 
 import java.util.ArrayList;
@@ -14,14 +20,15 @@ import java.util.Random;
 import java.util.Set;
 
 public class GameManager {
-    private static final String[] NUMBERED_CARD_COLORS = {"red", "yellow", "green", "blue"};
-    private static final String[] CARD_STYLE_VARIANTS = {"filled", "white"};
-    private static final String[] ACTION_CARD_VALUES = {"skip", "switch_order", "plus_2"};
-    private static final String CHANGE_COLOR = "change_color";
-    private static final String CHANGE_COLOR_PLUS_4 = "change_color_plus_4";
+    private static final CardColor[] CARD_COLORS = CardColor.values();
+    private static final CardStyle[] CARD_STYLES = CardStyle.values();
+    private static final CardSymbol[] COLORED_ACTION_SYMBOLS = {
+        CardSymbol.SKIP,
+        CardSymbol.SWITCH_ORDER,
+        CardSymbol.PLUS_2
+    };
     private static final int WILD_CARD_COUNT = 4;
     private static final int COLORED_ACTION_CARD_COUNT = 2;
-    private static final int NUMBERED_CARD_VARIANTS = 10;
     private static final int DEFAULT_HAND_SIZE = 7;
     private static final long DRAW_STEP_DELAY_MS = 250L;
     private static final long GAME_END_DELAY_MS = 500L;
@@ -77,7 +84,7 @@ public class GameManager {
 
         LobbyGameSession session = new LobbyGameSession();
         session.drawPile.addAll(createShuffledDrawPile());
-        session.topPlayPileCardId = drawOpeningPlayPileCard(session.drawPile);
+        session.topPlayPileCard = drawOpeningPlayPileCard(session.drawPile);
 
         int humanIndex = 0;
         for (Network.LobbyPlayer player : playersInOrder) {
@@ -208,33 +215,35 @@ public class GameManager {
 
     /** Plays a valid human card and advances game state. */
     private void handleHumanPlay(LobbyGameSession session, LobbyGamePlayer currentPlayer, Network.GameTurnActionRequest request) {
-        if (request.handIndex < 0 || request.handIndex >= currentPlayer.handCardIds.size()) {
+        if (request.handIndex < 0 || request.handIndex >= currentPlayer.handCards.size()) {
             return;
         }
 
-        String handCardId = currentPlayer.handCardIds.get(request.handIndex);
-        if (!canPlayCard(session.topPlayPileCardId, handCardId)) {
+        Card handCard = currentPlayer.handCards.get(request.handIndex);
+        if (!CardRules.canPlay(session.topPlayPileCard, handCard)) {
             return;
         }
 
-        String resolvedPlayPileCardId = resolvePlayedPileCard(handCardId, request.chosenColor);
-        if (resolvedPlayPileCardId == null) {
+        Card resolvedPlayedCard = CardRules.resolvePlayedCard(handCard, request.chosenColor);
+        if (resolvedPlayedCard == null) {
             return;
         }
 
-        currentPlayer.handCardIds.remove(request.handIndex);
+        currentPlayer.handCards.remove(request.handIndex);
         refreshPlayersWithTwoCards(session);
-        session.topPlayPileCardId = resolvedPlayPileCardId;
-        if (currentPlayer.handCardIds.isEmpty()) {
+        session.topPlayPileCard = resolvedPlayedCard;
+        if (currentPlayer.handCards.isEmpty()) {
             broadcastLobbyGameState(session);
             finishLobbyGame(session, currentPlayer.username);
             return;
         }
-        applyTurnDirectionChange(session, resolvedPlayPileCardId);
-        session.pendingDrawCount = extractDrawPenalty(resolvedPlayPileCardId);
-        // TODO
+        if (CardRules.reversesDirection(resolvedPlayedCard)) {
+            session.turnDirection *= -1;
+        }
+        session.pendingDrawCount = CardRules.drawPenalty(resolvedPlayedCard);
+        // Add missing functions
         maybeHandleBotDuoCallout(session);
-        // TODO
+        // Here the turn needs to be resolved at the end
     }
 
     /** Draws cards for a human player according to turn rules. */
@@ -243,7 +252,7 @@ public class GameManager {
             return;
         }
 
-        if (playerHasPlayableCard(session.topPlayPileCardId, currentPlayer.handCardIds)) {
+        if (playerHasPlayableCard(session.topPlayPileCard, currentPlayer.handCards)) {
             drawCardToPlayer(session, currentPlayer);
             advanceToNextTurn(session);
             broadcastLobbyGameState(session);
@@ -255,8 +264,8 @@ public class GameManager {
         session.currentPlayerCanDraw = false;
         session.turnActionsLocked = true;
         while (true) {
-            String drawnCardId = drawCardToPlayer(session, currentPlayer);
-            boolean playable = drawnCardId != null && canPlayCard(session.topPlayPileCardId, drawnCardId);
+            Card drawnCard = drawCardToPlayer(session, currentPlayer);
+            boolean playable = drawnCard != null && CardRules.canPlay(session.topPlayPileCard, drawnCard);
             session.turnActionsLocked = !playable;
             broadcastLobbyGameState(session);
             if (playable) {
@@ -309,24 +318,26 @@ public class GameManager {
         while (!session.players.isEmpty() && session.players.get(session.currentTurnIndex).bot && safetyCounter++ < 100) {
             LobbyGamePlayer bot = session.players.get(session.currentTurnIndex);
             boolean pendingBotDuoAfterPlay = shouldBotDeclareDuoAfterPlay(session, bot);
-            Opponent.Decision decision = opponent.chooseAction(session.topPlayPileCardId, bot.handCardIds);
+            Opponent.Decision decision = opponent.chooseAction(session.topPlayPileCard, bot.handCards);
             if (decision.action == Opponent.Action.PLAY) {
-                if (decision.handIndex < 0 || decision.handIndex >= bot.handCardIds.size()) {
+                if (decision.handIndex < 0 || decision.handIndex >= bot.handCards.size()) {
                     break;
                 }
-                bot.handCardIds.remove(decision.handIndex);
+                bot.handCards.remove(decision.handIndex);
                 refreshPlayersWithTwoCards(session);
-                session.topPlayPileCardId = decision.playPileCardId;
-                if (bot.handCardIds.isEmpty()) {
+                session.topPlayPileCard = decision.playedCard;
+                if (bot.handCards.isEmpty()) {
                     broadcastLobbyGameState(session);
                     finishLobbyGame(session, bot.username);
                     return;
                 }
-                applyTurnDirectionChange(session, decision.playPileCardId);
-                session.pendingDrawCount = extractDrawPenalty(decision.playPileCardId);
-                advanceToNextTurn(session, extractTurnAdvanceCount(decision.playPileCardId));
+                if (CardRules.reversesDirection(decision.playedCard)) {
+                    session.turnDirection *= -1;
+                }
+                session.pendingDrawCount = CardRules.drawPenalty(decision.playedCard);
+                advanceToNextTurn(session, CardRules.turnAdvanceCount(decision.playedCard));
                 broadcastLobbyGameState(session);
-                if (pendingBotDuoAfterPlay && bot.handCardIds.size() == 2) {
+                if (pendingBotDuoAfterPlay && bot.handCards.size() == 2) {
                     sleepBotDuoDelay();
                     processDuoCall(session, bot, true);
                 } else {
@@ -339,8 +350,8 @@ public class GameManager {
             session.currentPlayerCanDraw = false;
             session.turnActionsLocked = true;
             while (true) {
-                String drawnCardId = drawCardToPlayer(session, bot);
-                boolean playable = drawnCardId != null && canPlayCard(session.topPlayPileCardId, drawnCardId);
+                Card drawnCard = drawCardToPlayer(session, bot);
+                boolean playable = drawnCard != null && CardRules.canPlay(session.topPlayPileCard, drawnCard);
                 session.turnActionsLocked = !playable;
                 broadcastLobbyGameState(session);
                 if (playable) {
@@ -364,15 +375,17 @@ public class GameManager {
 
             Network.GameStateUpdate update = new Network.GameStateUpdate();
             // Something is missing here
-            update.topPlayPileCardId = session.topPlayPileCardId;
+            update.topPlayPileCard = session.topPlayPileCard;
             update.currentTurnUsername = currentTurnUsername;
             update.currentPlayerCanDraw = session.currentPlayerCanDraw;
             update.turnActionsLocked = session.turnActionsLocked;
             update.showDuoButton = shouldShowDuoButton(session, recipient, currentTurnUsername);
-            update.playerHandCardIds.addAll(recipient.handCardIds);
+            for (Card handCard : recipient.handCards) {
+                update.playerHandCards.add(handCard);
+            }
             for (LobbyGamePlayer player : session.players) {
                 update.playerUsernames.add(player.username);
-                update.playerHandCounts.add(player.handCardIds.size());
+                update.playerHandCounts.add(player.handCards.size());
             }
             recipient.account.sendPacket(update);
         }
@@ -413,19 +426,19 @@ public class GameManager {
     }
 
     /** Draws one card from the pile into a player's hand. */
-    private String drawCardToPlayer(LobbyGameSession session, LobbyGamePlayer player) {
-        String drawnCardId = drawCardFromPile(session);
-        if (drawnCardId != null) {
-            player.handCardIds.add(drawnCardId);
+    private Card drawCardToPlayer(LobbyGameSession session, LobbyGamePlayer player) {
+        Card drawnCard = drawCardFromPile(session);
+        if (drawnCard != null) {
+            player.handCards.add(drawnCard);
         }
-        return drawnCardId;
+        return drawnCard;
     }
 
     /** Rebuilds the set of players currently eligible for DUO calls. */
     private void refreshPlayersWithTwoCards(LobbyGameSession session) {
         session.playersWithTwoCards.clear();
         for (LobbyGamePlayer player : session.players) {
-            if (player.handCardIds.size() == 2) {
+            if (player.handCards.size() == 2) {
                 session.playersWithTwoCards.add(player.username);
             }
         }
@@ -541,8 +554,8 @@ public class GameManager {
     /** Checks whether a bot should plan to call DUO after playing. */
     private boolean shouldBotDeclareDuoAfterPlay(LobbyGameSession session, LobbyGamePlayer bot) {
         return bot != null
-            && bot.handCardIds.size() == 3
-            && playerHasPlayableCard(session.topPlayPileCardId, bot.handCardIds);
+            && bot.handCards.size() == 3
+            && playerHasPlayableCard(session.topPlayPileCard, bot.handCards);
     }
 
     /** Determines whether a player should see the DUO button. */
@@ -559,11 +572,11 @@ public class GameManager {
             return false;
         }
 
-        int handSize = recipient.handCardIds.size();
+        int handSize = recipient.handCards.size();
         if (session.playersWhoCalledDuo.contains(recipient.username)) {
             return false;
         }
-        return handSize == 2 || (handSize == 3 && playerHasPlayableCard(session.topPlayPileCardId, recipient.handCardIds));
+        return handSize == 2 || (handSize == 3 && playerHasPlayableCard(session.topPlayPileCard, recipient.handCards));
     }
 
     /** Checks whether another player can be challenged for missing DUO. */
@@ -577,202 +590,66 @@ public class GameManager {
     }
 
     /** Removes and returns one card from the draw pile. */
-    private String drawCardFromPile(LobbyGameSession session) {
+    private Card drawCardFromPile(LobbyGameSession session) {
         if (session.drawPile.isEmpty()) {
-            session.drawPile.addAll(createShuffledDrawPile());
+            // The drawPile should be populated with new cards here (use addAll on the drawPile)
         }
-        if (session.drawPile.isEmpty()) {
+        if (session.drawPile.isEmpty()) { // Safety check
             return null;
         }
         return session.drawPile.remove(session.drawPile.size() - 1);
     }
 
     /** Selects a numbered starting card for the play pile. */
-    private String drawOpeningPlayPileCard(List<String> drawPile) {
+    private Card drawOpeningPlayPileCard(List<Card> drawPile) {
         for (int i = drawPile.size() - 1; i >= 0; i--) {
-            String cardId = drawPile.get(i);
-            if (extractCardNumber(cardId) != null) {
+            Card card = drawPile.get(i);
+            if (card.symbol().isNumbered()) {
                 drawPile.remove(i);
-                return cardId;
+                return card;
             }
         }
-        return pickRandomNumberedCardId();
+        return pickRandomNumberedCard();
     }
 
-    // Incomplete function
     /** Builds and shuffles a fresh draw pile. */
-    private List<String> createShuffledDrawPile() {
-        List<String> drawPile = new ArrayList<>();
-        String cardStyle = CARD_STYLE_VARIANTS[random.nextInt(CARD_STYLE_VARIANTS.length)];
-        for (String color : NUMBERED_CARD_COLORS) {
-            for (int value = 0; value < NUMBERED_CARD_VARIANTS; value++) {
-                drawPile.add(color + "_" + value + "_" + cardStyle);
+    private List<Card> createShuffledDrawPile() {
+        List<Card> drawPile = new ArrayList<>();
+        CardStyle cardStyle = CARD_STYLES[random.nextInt(CARD_STYLES.length)]; // Chooses a card style to use
+        for (CardColor color : CARD_COLORS) {
+            for (int value = 0; value <= 9; value++) {
+                drawPile.add(new Card(color, CardSymbol.numbered(value), cardStyle));
             }
-            for (String actionValue : ACTION_CARD_VALUES) {
+            for (CardSymbol actionSymbol : COLORED_ACTION_SYMBOLS) {
                 for (int count = 0; count < COLORED_ACTION_CARD_COUNT; count++) {
-                    drawPile.add(color + "_" + actionValue + "_" + cardStyle);
+                    drawPile.add(new Card(color, actionSymbol, cardStyle));
                 }
             }
         }
         for (int count = 0; count < WILD_CARD_COUNT; count++) {
-            drawPile.add(CHANGE_COLOR);
-            drawPile.add(CHANGE_COLOR_PLUS_4);
+            drawPile.add(new Card(null, CardSymbol.CHANGE_COLOR, null));
+            drawPile.add(new Card(null, CardSymbol.CHANGE_COLOR_PLUS_4, null));
         }
+        // The deck should be shuffled here
 
         return drawPile;
     }
 
     /** Checks whether a hand contains any card playable on the pile. */
-    private boolean playerHasPlayableCard(String topPlayPileCardId, List<String> handCardIds) {
-        for (String handCardId : handCardIds) {
-            if (canPlayCard(topPlayPileCardId, handCardId)) {
+    private boolean playerHasPlayableCard(Card topPlayPileCard, List<Card> handCards) {
+        for (Card handCard : handCards) {
+            if (CardRules.canPlay(topPlayPileCard, handCard)) {
                 return true;
             }
         }
         return false;
-    }
-
-    /** Checks whether one card can legally be played on another. */
-    private boolean canPlayCard(String topPlayPileCardId, String handCardId) {
-        if (isAlwaysPlayableCard(handCardId)) {
-            return true;
-        }
-
-        String topSymbol = extractCardSymbol(topPlayPileCardId);
-        String playedSymbol = extractCardSymbol(handCardId);
-        if (topSymbol != null && topSymbol.equals(playedSymbol)) {
-            return true;
-        }
-
-        String topColor = extractCardColorId(topPlayPileCardId);
-        String playedColor = extractCardColorId(handCardId);
-        if (topColor != null && topColor.equals(playedColor)) {
-            return true;
-        }
-
-        Integer topNumber = extractCardNumber(topPlayPileCardId);
-        Integer playedNumber = extractCardNumber(handCardId);
-        return topNumber != null && topNumber.equals(playedNumber);
-    }
-
-    /** Resolves a played card into the ID stored on the play pile. */
-    private String resolvePlayedPileCard(String handCardId, String chosenColor) {
-        if (CHANGE_COLOR.equals(handCardId) || CHANGE_COLOR_PLUS_4.equals(handCardId)) {
-            if (!isValidColor(chosenColor)) {
-                return null;
-            }
-            return chosenColor + "_" + handCardId;
-        }
-        return handCardId;
-    }
-
-    /** Checks whether a color ID is one of the supported card colors. */
-    private boolean isValidColor(String colorId) {
-        if (colorId == null) {
-            return false;
-        }
-        for (String color : NUMBERED_CARD_COLORS) {
-            if (color.equals(colorId)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** Extracts the color prefix from a card ID. */
-    private static String extractCardColorId(String cardId) {
-        if (cardId == null) {
-            return null;
-        }
-        for (String color : NUMBERED_CARD_COLORS) {
-            if (cardId.startsWith(color + "_")) {
-                return color;
-            }
-        }
-        return null;
-    }
-
-    /** Extracts the numeric value from a numbered card ID. */
-    private static Integer extractCardNumber(String cardId) {
-        if (cardId == null) {
-            return null;
-        }
-        String[] parts = cardId.split("_");
-        if (parts.length < 2) {
-            return null;
-        }
-
-        try {
-            return Integer.parseInt(parts[1]);
-        } catch (NumberFormatException exception) {
-            return null;
-        }
-    }
-
-    /** Extracts the symbol portion used for card matching. */
-    private static String extractCardSymbol(String cardId) {
-        if (cardId == null || cardId.isBlank()) {
-            return null;
-        }
-        if (CHANGE_COLOR.equals(cardId) || CHANGE_COLOR_PLUS_4.equals(cardId)) {
-            return cardId;
-        }
-
-        String[] parts = cardId.split("_");
-        if (parts.length < 2) {
-            return cardId;
-        }
-
-        int startIndex = extractCardColorId(cardId) == null ? 0 : 1;
-        int endIndex = parts.length;
-        if (endIndex > startIndex && ("filled".equals(parts[endIndex - 1]) || "white".equals(parts[endIndex - 1]))) {
-            endIndex--;
-        }
-        if (startIndex >= endIndex) {
-            return cardId;
-        }
-
-        StringBuilder symbol = new StringBuilder();
-        for (int i = startIndex; i < endIndex; i++) {
-            if (i > startIndex) {
-                symbol.append('_');
-            }
-            symbol.append(parts[i]);
-        }
-        return symbol.toString();
-    }
-
-    /** Checks whether a card can be played on any pile card. */
-    private static boolean isAlwaysPlayableCard(String cardId) {
-        return CHANGE_COLOR.equals(cardId) || CHANGE_COLOR_PLUS_4.equals(cardId);
-    }
-
-    /** Returns the draw penalty caused by a played card. */
-    private int extractDrawPenalty(String cardId) {
-        // TODO
-        return 0;
-    }
-
-    /** Returns how many player slots the turn should advance. */
-    private int extractTurnAdvanceCount(String cardId) {
-        if (cardId != null && cardId.contains("_skip_")) {
-            return 2;
-        }
-        return 1;
-    }
-
-    /** Reverses turn direction when a reverse card is played. */
-    private void applyTurnDirectionChange(LobbyGameSession session, String cardId) {
-        if (cardId != null && cardId.contains("_switch_order_")) {
-            session.turnDirection *= -1;
-        }
     }
 
     /** Creates a fallback random numbered card ID. */
-    private String pickRandomNumberedCardId() {
-        String color = NUMBERED_CARD_COLORS[random.nextInt(NUMBERED_CARD_COLORS.length)];
-        int value = random.nextInt(NUMBERED_CARD_VARIANTS);
-        return color + "_" + value + "_filled";
+    private Card pickRandomNumberedCard() {
+        CardColor color = CARD_COLORS[random.nextInt(CARD_COLORS.length)];
+        int value = random.nextInt(10);
+        return new Card(color, CardSymbol.numbered(value), CardStyle.FILLED);
     }
 
     /** Pauses briefly between repeated draw animations. */
@@ -829,10 +706,10 @@ public class GameManager {
 
     private static final class LobbyGameSession {
         private final List<LobbyGamePlayer> players = new ArrayList<>();
-        private final List<String> drawPile = new ArrayList<>();
+        private final List<Card> drawPile = new ArrayList<>();
         private final Set<String> playersWithTwoCards = new HashSet<>();
         private final Set<String> playersWhoCalledDuo = new HashSet<>();
-        private String topPlayPileCardId;
+        private Card topPlayPileCard;
         private int currentTurnIndex;
         private int turnDirection = 1;
         private int pendingDrawCount;
@@ -844,7 +721,7 @@ public class GameManager {
         private final String username;
         private final boolean bot;
         private final Account account;
-        private final List<String> handCardIds = new ArrayList<>();
+        private final List<Card> handCards = new ArrayList<>();
 
         /** Stores player identity and hand state for a lobby game. */
         private LobbyGamePlayer(String username, boolean bot, Account account) {

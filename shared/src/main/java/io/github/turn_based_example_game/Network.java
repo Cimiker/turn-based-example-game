@@ -1,9 +1,12 @@
 package io.github.turn_based_example_game;
 
-import java.util.ArrayList;
-
 import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryonet.EndPoint;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
+
+import java.util.ArrayList;
 
 public class Network {
     public static void register(EndPoint endPoint) {
@@ -35,7 +38,27 @@ public class Network {
         kryo.register(GameTurnActionRequest.ActionType.class);
         kryo.register(GameDuoRequest.class);
         kryo.register(GameDuoEvent.class);
+        kryo.register(Card.class, new CardSerializer());
+        kryo.register(CardColor.class);
+        kryo.register(CardStyle.class);
+        kryo.register(CardSymbol.class);
+    }
 
+    private static final class CardSerializer extends Serializer<Card> {
+        @Override
+        public void write(Kryo kryo, Output output, Card card) {
+            kryo.writeObjectOrNull(output, card.color(), CardColor.class);
+            kryo.writeObject(output, card.symbol());
+            kryo.writeObjectOrNull(output, card.style(), CardStyle.class);
+        }
+
+        @Override
+        public Card read(Kryo kryo, Input input, Class<Card> type) {
+            CardColor color = kryo.readObjectOrNull(input, CardColor.class);
+            CardSymbol symbol = kryo.readObject(input, CardSymbol.class);
+            CardStyle style = kryo.readObjectOrNull(input, CardStyle.class);
+            return new Card(color, symbol, style);
+        }
     }
 
     public static class RegisterRequest {
@@ -60,22 +83,23 @@ public class Network {
 
     public static class GameStateUpdate {
         public int playerIndex;
-        public String topPlayPileCardId;
+        public Card topPlayPileCard;
         public String currentTurnUsername;
         public boolean currentPlayerCanDraw = true;
         public boolean turnActionsLocked;
         public boolean showDuoButton;
         public ArrayList<String> playerUsernames = new ArrayList<>();
         public ArrayList<Integer> playerHandCounts = new ArrayList<>();
-        public ArrayList<String> playerHandCardIds = new ArrayList<>();
+        public ArrayList<Card> playerHandCards = new ArrayList<>();
 
-        public GameStateUpdate() {}
+        public GameStateUpdate() {
+        }
     }
 
     public static class GameTurnActionRequest {
         public ActionType actionType;
         public int handIndex = -1;
-        public String chosenColor;
+        public CardColor chosenColor;
 
         public enum ActionType {
             PLAY_CARD,
@@ -95,10 +119,11 @@ public class Network {
         public enum Mode {
             HUMAN, COMPUTER, TEAMS
         }
+
         public Mode mode;
     }
 
-    public static class GameEnd{
+    public static class GameEnd {
         public String winner;
     }
 

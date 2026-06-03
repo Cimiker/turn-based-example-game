@@ -22,6 +22,11 @@ import com.badlogic.gdx.utils.Scaling;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.badlogic.gdx.math.Vector2;
 import io.github.turn_based_example_game.Account;
+import io.github.turn_based_example_game.Card;
+import io.github.turn_based_example_game.CardColor;
+import io.github.turn_based_example_game.CardRules;
+import io.github.turn_based_example_game.CardStyle;
+import io.github.turn_based_example_game.CardSymbol;
 import io.github.turn_based_example_game.Main;
 import io.github.turn_based_example_game.Network;
 import io.github.turn_based_example_game.NetworkManager;
@@ -44,23 +49,21 @@ public class GameScreen extends Stage {
     private static final int DEFAULT_HAND_SIZE = 7;
     private static final float CARD_HOVER_SCALE = 1.08f;
     private static final float CARD_HOVER_DURATION = 0.08f;
-    private static final String[] NUMBERED_CARD_COLORS = {"red", "yellow", "green", "blue"};
-    private static final int NUMBERED_CARD_VARIANTS = 10;
-    private static final String[] DEFAULT_PLAYER_HAND = {
-        "red_7_filled",
-        "yellow_2_white",
-        "blue_skip_filled",
-        "green_switch_order_white",
-        "change_color",
-        "red_plus_2_filled",
-        "blue_9_white"
+    private static final Card[] DEFAULT_PLAYER_HAND = {
+        new Card(CardColor.RED, CardSymbol.NUM_7, CardStyle.FILLED),
+        new Card(CardColor.YELLOW, CardSymbol.NUM_2, CardStyle.WHITE),
+        new Card(CardColor.BLUE, CardSymbol.SKIP, CardStyle.FILLED),
+        new Card(CardColor.GREEN, CardSymbol.SWITCH_ORDER, CardStyle.WHITE),
+        new Card(null, CardSymbol.CHANGE_COLOR, null),
+        new Card(CardColor.RED, CardSymbol.PLUS_2, CardStyle.FILLED),
+        new Card(CardColor.BLUE, CardSymbol.NUM_9, CardStyle.WHITE)
     };
 
     private final Array<Texture> disposableTextures = new Array<>();
     private final Main game;
     private final Skin skin;
     private final List<Network.LobbyPlayer> playOrder = new ArrayList<>();
-    private final List<String> playerHandCards = new ArrayList<>();
+    private final List<Card> playerHandCards = new ArrayList<>();
     private final PlayPile playPile;
     private final Map<String, Integer> handCountsByUsername = new HashMap<>();
     private final Map<String, Table> hiddenHandTablesByUsername = new HashMap<>();
@@ -87,6 +90,8 @@ public class GameScreen extends Stage {
     private String currentTurnUsername;
     private int pendingWildHandIndex = -1;
 
+    // === Construction ===
+
     /** Creates a standalone game screen with fallback state. */
     public GameScreen() {
         this(null, null, null);
@@ -109,7 +114,7 @@ public class GameScreen extends Stage {
         skin = new Skin(Gdx.files.internal("uiskin.json"));
         playOrder.addAll(buildPlayOrder(lobbyState != null ? lobbyState : NetworkManager.getCurrentLobby()));
         initializePlayerHand(initialGameState);
-        playPile = new PlayPile(resolveInitialTopPlayPileCardId(initialGameState));
+        playPile = new PlayPile(resolveInitialTopPlayPileCard(initialGameState));
         initializeDisplayedHandCounts(initialGameState);
         currentTurnUsername = resolveInitialTurnUsername(initialGameState);
         if (initialGameState != null) {
@@ -127,6 +132,8 @@ public class GameScreen extends Stage {
         NetworkManager.setGameDuoListener(gameDuoListener);
         Gdx.input.setInputProcessor(this);
     }
+
+    // === Layout ===
 
     /** Builds the full game board UI and overlay actors. */
     private void buildBoard() {
@@ -225,7 +232,7 @@ public class GameScreen extends Stage {
     private Table createCenterArea() {
         Table section = new Table();
         section.defaults().pad(10f);
-        playPileCardActor = new StaticCardActor(playPile.getTopCardId(), false, CARD_WIDTH, CARD_HEIGHT);
+        playPileCardActor = new StaticCardActor(playPile.getTopCard(), false, CARD_WIDTH, CARD_HEIGHT);
         section.add(createPile("Play Pile", playPileCardActor, CARD_WIDTH, CARD_HEIGHT))
             .size(CARD_WIDTH + 14f, CARD_HEIGHT + 38f);
 
@@ -239,23 +246,23 @@ public class GameScreen extends Stage {
         picker.setVisible(false);
         picker.setTouchable(Touchable.disabled);
 
-        picker.add(createWildColorButton("Red", "red"));
-        picker.add(createWildColorButton("Green", "green"));
+        picker.add(createWildColorButton("Red", CardColor.RED));
+        picker.add(createWildColorButton("Green", CardColor.GREEN));
         picker.row();
-        picker.add(createWildColorButton("Blue", "blue"));
-        picker.add(createWildColorButton("Yellow", "yellow"));
+        picker.add(createWildColorButton("Blue", CardColor.BLUE));
+        picker.add(createWildColorButton("Yellow", CardColor.YELLOW));
         picker.pack();
         return picker;
     }
 
     /** Creates one color choice button for the wild card picker. */
-    private TextButton createWildColorButton(String text, String colorId) {
+    private TextButton createWildColorButton(String text, CardColor color) {
         TextButton button = new TextButton(text, skin);
         button.addListener(new ClickListener() {
             /** Selects this button's wild card color. */
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                chooseWildColor(colorId);
+                chooseWildColor(color);
             }
         });
         return button;
@@ -345,11 +352,13 @@ public class GameScreen extends Stage {
         float width = CARD_WIDTH * OPPONENT_CARD_SCALE;
         float height = CARD_HEIGHT * OPPONENT_CARD_SCALE;
         for (int i = 0; i < cardCount; i++) {
-            Actor card = createCardActor("card_back", true, false, width, height);
+            Actor card = createCardActor(null, true, false, width, height);
             cards.add(card).size(width, height);
         }
         cards.invalidateHierarchy();
     }
+
+    // === Initial state ===
 
     /** Builds player seating order with the local player at the bottom. */
     private List<Network.LobbyPlayer> buildPlayOrder(Network.LobbyState lobbyState) {
@@ -438,22 +447,22 @@ public class GameScreen extends Stage {
     /** Initializes the local hand from server or fallback data. */
     private void initializePlayerHand(Network.GameStateUpdate initialGameState) {
         playerHandCards.clear();
-        if (initialGameState != null && initialGameState.playerHandCardIds != null && !initialGameState.playerHandCardIds.isEmpty()) {
-            playerHandCards.addAll(initialGameState.playerHandCardIds);
+        if (initialGameState != null && initialGameState.playerHandCards != null && !initialGameState.playerHandCards.isEmpty()) {
+            playerHandCards.addAll(initialGameState.playerHandCards);
             return;
         }
 
-        for (String cardId : DEFAULT_PLAYER_HAND) {
-            playerHandCards.add(cardId);
+        for (Card card : DEFAULT_PLAYER_HAND) {
+            playerHandCards.add(card);
         }
     }
 
     /** Resolves the starting play pile card for the screen. */
-    private String resolveInitialTopPlayPileCardId(Network.GameStateUpdate initialGameState) {
-        if (initialGameState != null && initialGameState.topPlayPileCardId != null && !initialGameState.topPlayPileCardId.isBlank()) {
-            return initialGameState.topPlayPileCardId;
+    private Card resolveInitialTopPlayPileCard(Network.GameStateUpdate initialGameState) {
+        if (initialGameState != null && initialGameState.topPlayPileCard != null) {
+            return initialGameState.topPlayPileCard;
         }
-        return pickRandomNumberedCardId();
+        return pickRandomNumberedCard();
     }
 
     /** Resolves whose turn should be displayed initially. */
@@ -492,11 +501,14 @@ public class GameScreen extends Stage {
     }
 
     /** Creates a fallback random numbered card ID. */
-    private String pickRandomNumberedCardId() {
-        String color = NUMBERED_CARD_COLORS[ThreadLocalRandom.current().nextInt(NUMBERED_CARD_COLORS.length)];
-        int value = ThreadLocalRandom.current().nextInt(NUMBERED_CARD_VARIANTS);
-        return color + "_" + value + "_filled";
+    private Card pickRandomNumberedCard() {
+        CardColor[] colors = CardColor.values();
+        CardColor color = colors[ThreadLocalRandom.current().nextInt(colors.length)];
+        int value = ThreadLocalRandom.current().nextInt(10);
+        return new Card(color, CardSymbol.numbered(value), CardStyle.FILLED);
     }
+
+    // === Network ===
 
     /** Applies a server game state update to the local UI. */
     private void applyGameStateUpdate(Network.GameStateUpdate update) {
@@ -504,8 +516,8 @@ public class GameScreen extends Stage {
             return;
         }
 
-        if (update.topPlayPileCardId != null && !update.topPlayPileCardId.isBlank()) {
-            playPile.placeCard(update.topPlayPileCardId);
+        if (update.topPlayPileCard != null) {
+            playPile.placeCard(update.topPlayPileCard);
         }
         if (update.currentTurnUsername != null && !update.currentTurnUsername.isBlank()) {
             currentTurnUsername = update.currentTurnUsername;
@@ -514,8 +526,8 @@ public class GameScreen extends Stage {
         turnActionsLocked = update.turnActionsLocked;
         serverShowDuoButton = update.showDuoButton;
         playerHandCards.clear();
-        if (update.playerHandCardIds != null) {
-            playerHandCards.addAll(update.playerHandCardIds);
+        if (update.playerHandCards != null) {
+            playerHandCards.addAll(update.playerHandCards);
         }
         pendingDuoAfterPlay = false;
         updateDisplayedHandCounts(update);
@@ -535,10 +547,12 @@ public class GameScreen extends Stage {
         game.switchScreen(new GameEndScreen(game, end));
     }
 
+    // === Synchronized UI ===
+
     /** Refreshes all UI elements that depend on synchronized game state. */
     private void refreshSynchronizedUi() {
         if (playPileCardActor != null) {
-            playPileCardActor.setCard(playPile.getTopCardId(), false);
+            playPileCardActor.setCard(playPile.getTopCard(), false);
         }
         refreshHiddenHandTables();
         refreshPlayerLabels();
@@ -573,6 +587,8 @@ public class GameScreen extends Stage {
         Integer count = handCountsByUsername.get(username);
         return count == null ? DEFAULT_HAND_SIZE : count;
     }
+
+    // === DUO ===
 
     /** Shows, hides, or disables the DUO button based on state. */
     private void updateDuoButtonState() {
@@ -655,6 +671,8 @@ public class GameScreen extends Stage {
         showDuoOverlay();
     }
 
+    // === Hand rendering and input ===
+
     /** Rebuilds the local player's visible hand cards. */
     private void refreshPlayerHand() {
         if (playerHandTable == null) {
@@ -670,8 +688,8 @@ public class GameScreen extends Stage {
 
     /** Checks whether the local hand contains a playable card. */
     private boolean playerHasPlayableCard() {
-        for (String cardId : playerHandCards) {
-            if (playPile.canAcceptCard(cardId)) {
+        for (Card card : playerHandCards) {
+            if (playPile.canAcceptCard(card)) {
                 return true;
             }
         }
@@ -716,12 +734,12 @@ public class GameScreen extends Stage {
             return;
         }
 
-        String playedCardId = playerHandCards.get(handIndex);
-        if (!playPile.canAcceptCard(playedCardId)) {
+        Card playedCard = playerHandCards.get(handIndex);
+        if (!playPile.canAcceptCard(playedCard)) {
             return;
         }
 
-        if (requiresWildColorChoice(playedCardId)) {
+        if (requiresWildColorChoice(playedCard)) {
             promptForWildColor(handIndex);
             return;
         }
@@ -729,8 +747,8 @@ public class GameScreen extends Stage {
     }
 
     /** Checks whether a card requires a chosen color before play. */
-    private boolean requiresWildColorChoice(String cardId) {
-        return "change_color".equals(cardId) || "change_color_plus_4".equals(cardId);
+    private boolean requiresWildColorChoice(Card card) {
+        return card != null && card.isWild() && !card.isResolvedWild();
     }
 
     /** Shows the wild color picker for a pending card play. */
@@ -746,14 +764,14 @@ public class GameScreen extends Stage {
     }
 
     /** Completes a pending wild card play with a selected color. */
-    private void chooseWildColor(String colorId) {
-        if (!pendingWildColorChoice || pendingWildHandIndex < 0 || colorId == null) {
+    private void chooseWildColor(CardColor color) {
+        if (!pendingWildColorChoice || pendingWildHandIndex < 0 || color == null) {
             return;
         }
 
         pendingWildColorChoice = false;
         hideWildColorPicker();
-        submitPlayCard(pendingWildHandIndex, colorId);
+        submitPlayCard(pendingWildHandIndex, color);
         pendingWildHandIndex = -1;
     }
 
@@ -781,7 +799,7 @@ public class GameScreen extends Stage {
     }
 
     /** Sends a play-card turn action to the server. */
-    private void submitPlayCard(int handIndex, String chosenColor) {
+    private void submitPlayCard(int handIndex, CardColor chosenColor) {
         pendingTurnSubmission = true;
         Network.GameTurnActionRequest request = new Network.GameTurnActionRequest();
         request.actionType = Network.GameTurnActionRequest.ActionType.PLAY_CARD;
@@ -793,20 +811,22 @@ public class GameScreen extends Stage {
         }
     }
 
+    // === Card assets and helpers ===
+
     /** Creates a visible or hidden card actor with optional hover behavior. */
-    private Actor createCardActor(String cardId, boolean hidden, boolean hoverEnabled, float width, float height) {
+    private Actor createCardActor(Card card, boolean hidden, boolean hoverEnabled, float width, float height) {
         return hoverEnabled
-            ? new HoverCardActor(cardId, hidden, width, height)
-            : new StaticCardActor(cardId, hidden, width, height);
+            ? new HoverCardActor(card, hidden, width, height)
+            : new StaticCardActor(card, hidden, width, height);
     }
 
     /** Loads a card texture or creates a placeholder if missing. */
-    private Texture loadCardTexture(String cardId, boolean hidden) {
-        String resolvedCardId = hidden ? "card_back" : cardId;
+    private Texture loadCardTexture(Card card, boolean hidden) {
+        String resolvedCardId = hidden ? "card_back" : card.assetId();
         String texturePath = CARD_ASSET_ROOT + resolvedCardId + ".png";
         return Gdx.files.internal(texturePath).exists()
             ? trackTexture(new Texture(Gdx.files.internal(texturePath)))
-            : createPlaceholderCardTexture(resolvedCardId, hidden);
+            : createPlaceholderCardTexture(card, hidden);
     }
 
     /** Creates a simple generated board background texture. */
@@ -833,10 +853,10 @@ public class GameScreen extends Stage {
     }
 
     /** Creates a generated placeholder texture for a missing card asset. */
-    private Texture createPlaceholderCardTexture(String cardId, boolean hidden) {
+    private Texture createPlaceholderCardTexture(Card card, boolean hidden) {
         Pixmap pixmap = new Pixmap(184, 276, Pixmap.Format.RGBA8888);
 
-        Color faceColor = hidden ? Color.valueOf("1b1f3b") : getCardColor(cardId);
+        Color faceColor = hidden ? Color.valueOf("1b1f3b") : getCardColor(card);
         pixmap.setColor(Color.WHITE);
         fillRoundedRectangle(pixmap, 0, 0, 184, 276, 26);
 
@@ -855,9 +875,9 @@ public class GameScreen extends Stage {
                 pixmap.drawLine(20, 138 + line, 164, line + 20);
             }
         } else {
-            drawValue(pixmap, extractCardValue(cardId), 68, 94, 8, Color.valueOf("1a1a1a"));
-            drawValue(pixmap, extractCornerValue(cardId), 24, 24, 4, Color.WHITE);
-            drawValue(pixmap, extractCornerValue(cardId), 136, 222, 4, Color.WHITE);
+            drawValue(pixmap, extractCardValue(card), 68, 94, 8, Color.valueOf("1a1a1a"));
+            drawValue(pixmap, extractCornerValue(card), 24, 24, 4, Color.WHITE);
+            drawValue(pixmap, extractCornerValue(card), 136, 222, 4, Color.WHITE);
         }
 
         Texture texture = new Texture(pixmap);
@@ -917,115 +937,46 @@ public class GameScreen extends Stage {
     }
 
     /** Extracts display text for the center of a card. */
-    private String extractCardValue(String cardId) {
-        if (cardId.startsWith("wild_draw_four")) {
-            return "W+4";
+    private String extractCardValue(Card card) {
+        if (card == null) {
+            return "?";
         }
-        if (cardId.startsWith("wild")) {
-            return "W";
-        }
-        if (cardId.endsWith("draw_two")) {
-            return "D+2";
-        }
-        if (cardId.endsWith("reverse")) {
-            return "R";
-        }
-        if (cardId.endsWith("skip")) {
-            return "S";
-        }
-        int splitIndex = cardId.indexOf('_');
-        return splitIndex >= 0 ? cardId.substring(splitIndex + 1).toUpperCase() : cardId.toUpperCase();
+        return switch (card.symbol()) {
+            case NUM_0 -> "0";
+            case NUM_1 -> "1";
+            case NUM_2 -> "2";
+            case NUM_3 -> "3";
+            case NUM_4 -> "4";
+            case NUM_5 -> "5";
+            case NUM_6 -> "6";
+            case NUM_7 -> "7";
+            case NUM_8 -> "8";
+            case NUM_9 -> "9";
+            case SKIP -> "S";
+            case SWITCH_ORDER -> "R";
+            case PLUS_2 -> "D+2";
+            case CHANGE_COLOR -> "W";
+            case CHANGE_COLOR_PLUS_4 -> "W+4";
+        };
     }
 
     /** Extracts shortened display text for card corners. */
-    private String extractCornerValue(String cardId) {
-        String value = extractCardValue(cardId);
+    private String extractCornerValue(Card card) {
+        String value = extractCardValue(card);
         return value.length() > 2 ? value.substring(0, 2) : value;
     }
 
-    /** Extracts the color prefix from a card ID. */
-    private static String extractCardColorId(String cardId) {
-        for (String color : NUMBERED_CARD_COLORS) {
-            if (cardId.startsWith(color + "_")) {
-                return color;
-            }
-        }
-        return null;
-    }
-
-    /** Extracts the numeric value from a numbered card ID. */
-    private static Integer extractCardNumber(String cardId) {
-        if (cardId == null) {
-            return null;
-        }
-        String[] parts = cardId.split("_");
-        if (parts.length < 2) {
-            return null;
-        }
-
-        try {
-            return Integer.parseInt(parts[1]);
-        } catch (NumberFormatException exception) {
-            return null;
-        }
-    }
-
-    /** Extracts the symbol portion used for card matching. */
-    private static String extractCardSymbol(String cardId) {
-        if (cardId == null || cardId.isBlank()) {
-            return null;
-        }
-        if ("change_color".equals(cardId) || "change_color_plus_4".equals(cardId)) {
-            return cardId;
-        }
-
-        String[] parts = cardId.split("_");
-        if (parts.length < 2) {
-            return cardId;
-        }
-
-        int startIndex = extractCardColorId(cardId) == null ? 0 : 1;
-        int endIndex = parts.length;
-        if (endIndex > startIndex && ("filled".equals(parts[endIndex - 1]) || "white".equals(parts[endIndex - 1]))) {
-            endIndex--;
-        }
-        if (startIndex >= endIndex) {
-            return cardId;
-        }
-
-        StringBuilder symbol = new StringBuilder();
-        for (int i = startIndex; i < endIndex; i++) {
-            if (i > startIndex) {
-                symbol.append('_');
-            }
-            symbol.append(parts[i]);
-        }
-        return symbol.toString();
-    }
-
-    /** Checks whether a card can be played on any pile card. */
-    private static boolean isAlwaysPlayableCard(String cardId) {
-        return "change_color".equals(cardId) || "change_color_plus_4".equals(cardId);
-    }
-
     /** Resolves the display color for a card ID. */
-    private Color getCardColor(String cardId) {
-        if (cardId.startsWith("red")) {
-            return Color.valueOf("d64045");
-        }
-        if (cardId.startsWith("yellow")) {
-            return Color.valueOf("f0b429");
-        }
-        if (cardId.startsWith("green")) {
-            return Color.valueOf("2f9e44");
-        }
-        if (cardId.startsWith("blue")) {
-            return Color.valueOf("1971c2");
-        }
-        if (cardId.startsWith("wild")) {
+    private Color getCardColor(Card card) {
+        if (card == null || card.color() == null) {
             return Color.valueOf("2b2d42");
         }
-        return Color.GRAY;
+        return switch (card.color()) {
+            case RED -> Color.valueOf("d64045");
+            case YELLOW -> Color.valueOf("f0b429");
+            case GREEN -> Color.valueOf("2f9e44");
+            case BLUE -> Color.valueOf("1971c2");
+        };
     }
 
     /** Tracks a texture so it can be disposed with the screen. */
@@ -1033,6 +984,8 @@ public class GameScreen extends Stage {
         disposableTextures.add(texture);
         return texture;
     }
+
+    // === Lifecycle ===
 
     /** Updates layout-sensitive actors after a viewport resize. */
     public void resize(int width, int height) {
@@ -1083,13 +1036,15 @@ public class GameScreen extends Stage {
         super.dispose();
     }
 
+    // === Nested actors and models ===
+
     private class StaticCardActor extends Image {
         private final float width;
         private final float height;
 
         /** Creates a non-interactive card image actor. */
-        private StaticCardActor(String cardId, boolean hidden, float width, float height) {
-            super(loadCardTexture(cardId, hidden));
+        private StaticCardActor(Card card, boolean hidden, float width, float height) {
+            super(loadCardTexture(card, hidden));
             this.width = width;
             this.height = height;
             setScaling(Scaling.fit);
@@ -1097,16 +1052,16 @@ public class GameScreen extends Stage {
         }
 
         /** Replaces this actor's displayed card texture. */
-        private void setCard(String cardId, boolean hidden) {
-            setDrawable(new TextureRegionDrawable(loadCardTexture(cardId, hidden)));
+        private void setCard(Card card, boolean hidden) {
+            setDrawable(new TextureRegionDrawable(loadCardTexture(card, hidden)));
             setSize(width, height);
         }
     }
 
     private class HoverCardActor extends StaticCardActor {
         /** Creates a card actor that scales up when hovered. */
-        private HoverCardActor(String cardId, boolean hidden, float width, float height) {
-            super(cardId, hidden, width, height);
+        private HoverCardActor(Card card, boolean hidden, float width, float height) {
+            super(card, hidden, width, height);
             setOrigin(width / 2f, height / 2f);
             setTouchable(Touchable.enabled);
             addListener(new InputListener() {
@@ -1136,8 +1091,8 @@ public class GameScreen extends Stage {
 
     private final class PlayerHandCardActor extends HoverCardActor {
         /** Creates a clickable card actor for the local player's hand. */
-        private PlayerHandCardActor(int handIndex, String cardId, float width, float height) {
-            super(cardId, false, width, height);
+        private PlayerHandCardActor(int handIndex, Card card, float width, float height) {
+            super(card, false, width, height);
             addListener(new ClickListener() {
                 /** Plays the card when it is double-clicked. */
                 @Override
@@ -1153,7 +1108,7 @@ public class GameScreen extends Stage {
     private final class DrawPileCardActor extends HoverCardActor {
         /** Creates a clickable draw pile card actor. */
         private DrawPileCardActor(float width, float height) {
-            super("card_back", true, width, height);
+            super(null, true, width, height);
             addListener(new ClickListener() {
                 /** Draws cards when the pile is double-clicked. */
                 @Override
@@ -1167,44 +1122,26 @@ public class GameScreen extends Stage {
     }
 
     private static final class PlayPile {
-        private String topCardId;
+        private Card topCard;
 
         /** Stores the current top card of the play pile. */
-        private PlayPile(String initialTopCardId) {
-            topCardId = initialTopCardId;
+        private PlayPile(Card initialTopCard) {
+            topCard = initialTopCard;
         }
 
         /** Returns the current top play pile card ID. */
-        private String getTopCardId() {
-            return topCardId;
+        private Card getTopCard() {
+            return topCard;
         }
 
         /** Checks whether a card can be played on this pile. */
-        private boolean canAcceptCard(String cardId) {
-            if (isAlwaysPlayableCard(cardId)) {
-                return true;
-            }
-
-            String topSymbol = extractCardSymbol(topCardId);
-            String playedSymbol = extractCardSymbol(cardId);
-            if (topSymbol != null && topSymbol.equals(playedSymbol)) {
-                return true;
-            }
-
-            String topColor = extractCardColorId(topCardId);
-            String playedColor = extractCardColorId(cardId);
-            if (topColor != null && topColor.equals(playedColor)) {
-                return true;
-            }
-
-            Integer topNumber = extractCardNumber(topCardId);
-            Integer playedNumber = extractCardNumber(cardId);
-            return topNumber != null && topNumber.equals(playedNumber);
+        private boolean canAcceptCard(Card card) {
+            return CardRules.canPlay(topCard, card);
         }
 
         /** Updates the top card of the play pile. */
-        private void placeCard(String cardId) {
-            topCardId = cardId;
+        private void placeCard(Card card) {
+            topCard = card;
         }
     }
 }

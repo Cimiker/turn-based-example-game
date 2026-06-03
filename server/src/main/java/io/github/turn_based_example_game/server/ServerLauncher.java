@@ -2,6 +2,7 @@ package io.github.turn_based_example_game.server;
 
 import com.esotericsoftware.kryonet.Listener;
 import com.esotericsoftware.kryonet.Connection;
+import io.github.turn_based_example_game.Network;
 import java.io.IOException;
 
 

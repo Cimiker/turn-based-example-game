@@ -1,5 +1,7 @@
 package io.github.turn_based_example_game.server;
 
+import io.github.turn_based_example_game.Network;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -68,6 +70,8 @@ public class LobbyManager {
             account.sendPacket(result);
             return true;
         }
+
+        // There seems to be something missing here
 
         return false;
     }
@@ -143,7 +147,7 @@ public class LobbyManager {
             return failedResult("A lobby couldn't be found");
         }
 
-        Lobby lobby = lobbiesById.get(lobbyId.trim().toUpperCase());
+        Lobby lobby = lobbiesById.get(lobbyId); // Probably should add a check here as well
         if (lobby == null) {
             return failedResult("A lobby couldn't be found");
         }
@@ -154,9 +158,8 @@ public class LobbyManager {
     /** Attempts to join the first available public lobby. */
     private Network.LobbyOperationResult joinRandomPublicLobby(Account account) {
         for (Lobby lobby : lobbiesById.values()) {
-            if ("Public".equalsIgnoreCase(lobby.settings.lobbyMode)) { // Something's missing here
-                return joinLobby(account, lobby);
-            }
+            // Something's missing here
+            return joinLobby(account, lobby);
         }
 
         return failedResult("No public lobby is available right now.");
@@ -173,14 +176,14 @@ public class LobbyManager {
         }
 
         Network.LobbyPlayer requester = lobby.players.get(account);
-        if (requester == null || !requester.owner) {
+        if (false) { // Add the necessary check
             result.success = false;
             result.message = "Only the lobby owner can start the game.";
             result.lobbyState = toLobbyState(lobby);
             return result;
         }
 
-        if (!allPlayersReady(lobby)) {
+        if (false) { // Add the necessary check
             result.success = false;
             result.message = "All players must be ready before the game can start.";
             result.lobbyState = toLobbyState(lobby);

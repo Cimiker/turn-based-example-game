@@ -104,11 +104,9 @@ public class JoinPrivateLobbyScreen extends Stage {
                     statusLabel.setText("Server is not available");
                     return;
                 }
-                String lobbyCode = lobbyCodeField.getText(); // This seems too loose
-                if (lobbyCode.length() != 5) {
-                    statusLabel.setText("A lobby couldn't be found");
-                    return;
-                }
+                String lobbyCode = lobbyCodeField.getText();
+                // This seems too loose
+
                 NetworkManager.joinLobbyByCode(lobbyCode);
             }
         });

@@ -74,7 +74,7 @@ public class JoinGameLobbyScreen extends Stage {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 statusLabel.setText("");
-                NetworkManager.joinPublicLobby();
+                // Add the necessary network function call
             }
         });
 

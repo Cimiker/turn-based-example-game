@@ -62,7 +62,7 @@ public class GameLobbyScreen extends Stage {
         readyButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                NetworkManager.toggleReady();
+                // Add the function call
             }
         });
 
@@ -70,9 +70,7 @@ public class GameLobbyScreen extends Stage {
         startGameButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                if (!startGameButton.isDisabled()) {
-                    NetworkManager.startLobbyGame();
-                }
+                // Add the function call and check
             }
         });
 
