@@ -12,6 +12,7 @@ application.applicationName = appName
 eclipse.project.name = appName + '-server'
 
 dependencies {
+  api project(':shared')
   api "com.esotericsoftware:kryonet:2.22.0-RC1"
 }
 
