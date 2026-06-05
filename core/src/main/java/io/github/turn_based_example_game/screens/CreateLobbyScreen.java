@@ -86,7 +86,7 @@ public class CreateLobbyScreen extends Stage {
                 settings.lobbyMode = lobbyModeButtonGroup.getChecked().getText().toString();
                 settings.fillWithBots = "Yes".contentEquals(botsButtonGroup.getChecked().getText());
 
-                // There seems to be something missing here
+                NetworkManager.createLobby(settings);
 
                 Gdx.app.postRunnable(() -> game.switchScreen(new GameLobbyScreen(game)));
             }

@@ -32,8 +32,7 @@ public final class CardRules {
             return 0;
         }
         return switch (card.symbol()) {
-            case PLUS_2 -> 2;
-            case CHANGE_COLOR_PLUS_4 -> 4;
+            case PLUS_2 -> 0;
             default -> 0;
         };
     }

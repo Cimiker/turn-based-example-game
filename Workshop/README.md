@@ -34,7 +34,7 @@ The server receives lobby requests in `LobbyManager.handlePacket`. Check that `N
 In `CreateLobbyScreen`, create a `Network.LobbySettings` object from the selected max player count, lobby mode, and bot setting. Send it with `NetworkManager.createLobby(settings)`.
 
 The function should look like:
-```
+```java
     createLobbyButton.addListener(new ClickListener() {
             /** Sends the selected lobby settings and opens the lobby screen. */
             @Override
@@ -54,7 +54,7 @@ The function should look like:
 In `LobbyManager`, handle `Network.CreateLobbyRequest` by calling `createLobby(account, request.settings)`.
 
 The code to add to the handlePacket function:
-```
+```java
     if (object instanceof Network.CreateLobbyRequest request) {
         Network.LobbyOperationResult result = createLobby(account, request.settings);
         account.sendPacket(result);
@@ -89,7 +89,7 @@ In `JoinPrivateLobbyScreen`, reject lobby codes that are not exactly 5 letters. 
 
 The function should look like:
 
-```
+```java
     joinLobbyButton.addListener(new ClickListener() {
             /** Validates the entered lobby code and sends a join request. */
             @Override
@@ -110,7 +110,7 @@ In `LobbyManager.joinLobbyByCode`, reject null or blank codes. Trim and uppercas
 
 The function should look like:
 
-```
+```java
     /** Attempts to join a private lobby using a lobby code. */
     private Network.LobbyOperationResult joinLobbyByCode(Account account, String lobbyId) {
         if (lobbyId == null || lobbyId.isBlank()) {
@@ -150,7 +150,7 @@ The server method `LobbyManager.joinRandomPublicLobby` should search through exi
 <summary>Solution</summary>
 
 The `joinPublicLobbyButton` in `JoinGameLobbyScreen` should look like
-```
+```java
     joinPublicLobbyButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
@@ -161,7 +161,7 @@ The `joinPublicLobbyButton` in `JoinGameLobbyScreen` should look like
 ```
 
 The `joinRandomPublicLobby` function in `LobbyManager` should look like
-```
+```java
     private Network.LobbyOperationResult joinRandomPublicLobby(Account account) {
         for (Lobby lobby : lobbiesById.values()) {
             if ("Public".equalsIgnoreCase(lobby.settings.lobbyMode) && hasJoinableSlot(lobby)) {
@@ -197,7 +197,7 @@ Do not trust only the client. The server must also check that the requester is t
 
 In the `GameLobbyScreen` constructor, the listeners for `readyButton` and `startGameButton` should look like
 
-```
+```java
     readyButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
@@ -205,7 +205,7 @@ In the `GameLobbyScreen` constructor, the listeners for `readyButton` and `start
             }
         });
 ```
-```
+```java
     startGameButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
@@ -217,11 +217,11 @@ In the `GameLobbyScreen` constructor, the listeners for `readyButton` and `start
 ```
 
 In `LobbyManager`, in `toggleReady` instead of the commented line should be the line
-```
+```java
     player.ready = !player.ready;
 ```
 And for the start of the function `startLobbyGame` should look like
-```
+```java
     private Network.LobbyOperationResult startLobbyGame(Account account) {
         Network.LobbyOperationResult result = new Network.LobbyOperationResult();
         Lobby lobby = lobbiesByAccount.get(account);
@@ -271,11 +271,11 @@ Look at `createShuffledDrawPile`, `dealStartingHand`, `drawCardToPlayer`, and `d
 <summary>Solution</summary>
 
 In `createShuffledDrawPile`, before the return statement you need to add
-```
+```java
     Collections.shuffle(drawPile, random);
 ```
 The `drawCardFromPile` should look like
-```
+```java
     private Card drawCardFromPile(LobbyGameSession session) {
         if (session.drawPile.isEmpty()) {
             session.drawPile.addAll(createShuffledDrawPile());
@@ -319,7 +319,7 @@ In `broadcastLobbyGameState`, set `update.currentTurnUsername` to the username o
 
 This how the full function should look like
 
-```
+```java
     private void handleHumanPlay(LobbyGameSession session, LobbyGamePlayer currentPlayer, Network.GameTurnActionRequest request) {
         if (request.handIndex < 0 || request.handIndex >= currentPlayer.handCards.size()) {
             return;
