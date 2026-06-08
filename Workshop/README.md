@@ -91,19 +91,24 @@ The function should look like:
 
 ```java
     joinLobbyButton.addListener(new ClickListener() {
-            /** Validates the entered lobby code and sends a join request. */
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                statusLabel.setText("");
-                    statusLabel.setText("Server is not available");
-                    return;
-                }
-                
-                String lobbyCode = lobbyCodeField.getText().trim().toUpperCase();
-                if (lobbyCode.length() != 5) {
-                    statusLabel.setText("A lobby couldn't be found");
-                    return;
-        });
+        /** Validates the entered lobby code and sends a join request. */
+        @Override
+        public void clicked(InputEvent event, float x, float y){
+            statusLabel.setText("");
+            navigatingToLobby = false;
+            if (!NetworkManager.isConnected()) {
+                statusLabel.setText("Server is not available");
+                return;
+            }
+        
+            String lobbyCode = lobbyCodeField.getText().trim().toUpperCase();
+            if (lobbyCode.length() != 5) {
+                statusLabel.setText("A lobby couldn't be found");
+                return;
+            }
+            NetworkManager.joinLobbyByCode(lobbyCode);
+        }
+    });
 ```
 
 In `LobbyManager.joinLobbyByCode`, reject null or blank codes. Trim and uppercase the code before calling `lobbiesById.get(...)`.
@@ -290,7 +295,7 @@ The `drawCardFromPile` should look like
 
 ### 6. Fix passing the turn to the next player
 
-Turn handling is currently broken. After a player plays a valid card or draws a card when allowed, the turn should move to the next player. The game should also tell every client whose turn it is, so only the current player can act. Look at the file in general to find functions that need to be called.
+Turn handling is currently broken. After a player plays a valid card or draws a card when allowed, the turn should move to the next player. The game should also tell every client whose turn it is, so only the current player can act. Look at the file in general to find functions that need to be called. Some of the necessary function are already implemented, however you have to check that all functions that are called have been implemented. 
 
 <details>
 <summary>Tip 1</summary>
@@ -308,14 +313,6 @@ Look at `advanceToNextTurn` and `broadcastLobbyGameState`. `advanceToNextTurn` s
 
 <details>
 <summary>Solution</summary>
-
-In `handleHumanPlay`, after removing the played card from the current player's hand and applying any card effects, call `advanceToNextTurn(session, CardRules.turnAdvanceCount(resolvedPlayedCard))`. Then call `broadcastLobbyGameState(session)` and `resolveCurrentTurn(session)`.
-
-In `handleHumanDraw`, after the player draws a card and the draw action is finished, call `advanceToNextTurn(session)`, then broadcast the updated game state.
-
-In `advanceToNextTurn`, calculate the next player index from `session.currentTurnIndex`, `session.turnDirection`, and the number of players. Store the result back into `session.currentTurnIndex`. Also reset `session.currentPlayerCanDraw` to `true` and `session.turnActionsLocked` to `false`.
-
-In `broadcastLobbyGameState`, set `update.currentTurnUsername` to the username of `session.players.get(session.currentTurnIndex)`. The client uses this value to decide whether the local player is allowed to play or draw.
 
 This how the full function should look like
 
